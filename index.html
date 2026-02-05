@@ -1,0 +1,392 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<title>OPCG Swipe Picker</title>
+<style>
+  body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans JP",sans-serif;background:#111;color:#fff;}
+  header{position:sticky;top:0;background:#111;z-index:10;padding:10px 12px;border-bottom:1px solid #222;}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  select,button,input,textarea{font-size:16px}
+  select,button{padding:8px 10px;border-radius:10px;border:1px solid #333;background:#1a1a1a;color:#fff}
+  button.primary{border-color:#555}
+  main{padding:12px}
+  .cardWrap{display:flex;justify-content:center;align-items:center}
+  .card{
+    width:min(92vw,520px);
+    height:calc(min(92vw,520px)*1.40);
+    background:#000;border:1px solid #333;border-radius:16px;overflow:hidden;position:relative;
+    touch-action:pan-y;
+  }
+  .card img{width:100%;height:100%;object-fit:contain;background:#000}
+  .meta{
+    position:absolute;left:0;right:0;bottom:0;
+    background:linear-gradient(transparent, rgba(0,0,0,.85) 35%, rgba(0,0,0,.92));
+    padding:12px 12px 10px;
+  }
+  .meta .id{font-weight:700;letter-spacing:.3px}
+  .meta .name{font-size:18px;font-weight:700;margin-top:2px}
+  .meta .src{font-size:13px;opacity:.9;margin-top:4px}
+  .badge{
+    position:absolute;top:10px;left:10px;background:rgba(0,0,0,.6);border:1px solid #333;
+    padding:6px 10px;border-radius:999px;font-size:13px
+  }
+  .badge.right{left:auto;right:10px}
+  .controls{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:12px}
+  .hint{opacity:.75;font-size:13px;text-align:center;margin-top:8px}
+  .hidden{display:none!important}
+  /* candidates */
+  .list{display:grid;grid-template-columns:1fr;gap:10px;margin-top:12px}
+  .item{border:1px solid #333;border-radius:14px;padding:10px;background:#141414;display:grid;grid-template-columns:84px 1fr;gap:10px}
+  .thumb{width:84px;height:118px;border-radius:10px;overflow:hidden;border:1px solid #2a2a2a;background:#000}
+  .thumb img{width:100%;height:100%;object-fit:contain}
+  .item h3{margin:0;font-size:16px}
+  .small{font-size:13px;opacity:.85;margin-top:4px}
+  .chk{display:flex;align-items:center;gap:8px;margin-top:6px}
+  textarea{width:100%;min-height:48px;border-radius:10px;border:1px solid #333;background:#0f0f0f;color:#fff;padding:8px}
+  .topTabs{display:flex;gap:8px;margin-top:8px}
+  .topTabs button{flex:1}
+</style>
+</head>
+<body>
+<header>
+  <div class="row">
+    <strong>OPCG 仕分け</strong>
+    <span id="stat" style="opacity:.8"></span>
+  </div>
+  <div class="row topTabs">
+    <button class="primary" id="tabBrowse">仕分け（全件）</button>
+    <button id="tabPick">候補（⭐）</button>
+  </div>
+  <div class="row" id="browseBar">
+    <label>種類（入手情報）:</label>
+    <select id="sourceFilter"></select>
+    <button id="togglePicked" class="primary">⭐ 切替</button>
+    <button id="prevBtn">◀ 前</button>
+    <button id="nextBtn">次 ▶</button>
+  </div>
+  <div class="row hidden" id="pickBar">
+    <button id="filterAll" class="primary">全部</button>
+    <button id="filterNeed">未所持のみ</button>
+    <button id="filterOwned">所持のみ</button>
+    <button id="exportBtn">エクスポート(JSON)</button>
+    <button id="importBtn">インポート(JSON)</button>
+    <input id="importFile" type="file" accept="application/json" class="hidden"/>
+  </div>
+</header>
+
+<main>
+  <section id="browseView">
+    <div class="cardWrap">
+      <div class="card" id="card">
+        <div class="badge" id="badgeLeft"></div>
+        <div class="badge right" id="badgeRight"></div>
+        <img id="cardImg" alt="card"/>
+        <div class="meta">
+          <div class="id" id="mId"></div>
+          <div class="name" id="mName"></div>
+          <div class="src" id="mSrc"></div>
+        </div>
+      </div>
+    </div>
+    <div class="controls">
+      <button id="pickBtn">⭐ 気になる</button>
+      <button id="unpickBtn">☆ 外す</button>
+    </div>
+    <div class="hint">左右スワイプ（またはボタン）で前/次。⭐で候補に追加 → 候補タブで所持チェック。</div>
+  </section>
+
+  <section id="pickView" class="hidden">
+    <div id="pickSummary" style="opacity:.85"></div>
+    <div class="list" id="pickList"></div>
+  </section>
+</main>
+
+<script>
+const STATE_KEY = "opcg_state_v1";
+let cards = [];
+let viewMode = "browse"; // browse | pick
+let currentIndex = 0;
+let currentSource = "ALL";
+let pickFilter = "ALL"; // ALL | NEED | OWNED
+
+function normalizeSource(s){
+  return (s||"").trim() || "(不明)";
+}
+
+function byId(a,b){ return a.id.localeCompare(b.id); }
+
+function saveState(){
+  const state = cards.map(c => ({id:c.id, picked:!!c.picked, owned:!!c.owned, memo:c.memo||""}));
+  localStorage.setItem(STATE_KEY, JSON.stringify(state));
+}
+
+function loadState(){
+  const raw = localStorage.getItem(STATE_KEY);
+  if(!raw) return;
+  try{
+    const state = JSON.parse(raw);
+    const map = new Map(state.map(x => [x.id, x]));
+    for(const c of cards){
+      const st = map.get(c.id);
+      if(st){
+        c.picked = !!st.picked;
+        c.owned = !!st.owned;
+        c.memo = st.memo || "";
+      }
+    }
+  }catch(e){}
+}
+
+function getSources(){
+  const set = new Set(cards.map(c => normalizeSource(c.source)));
+  return ["ALL", ...Array.from(set).sort()];
+}
+
+function filteredCards(){
+  if(currentSource==="ALL") return cards;
+  return cards.filter(c => normalizeSource(c.source)===currentSource);
+}
+
+function ensureIndexInRange(){
+  const arr = filteredCards();
+  if(arr.length===0){ currentIndex=0; return; }
+  if(currentIndex<0) currentIndex=0;
+  if(currentIndex>=arr.length) currentIndex=arr.length-1;
+}
+
+function renderBrowse(){
+  ensureIndexInRange();
+  const arr = filteredCards();
+  const stat = document.getElementById("stat");
+  if(arr.length===0){
+    stat.textContent = "（該当なし）";
+    return;
+  }
+  const c = arr[currentIndex];
+
+  // 画像
+  const img = document.getElementById("cardImg");
+  img.src = c.image || "";
+  img.alt = `${c.id} ${c.name}`;
+
+  // メタ
+  document.getElementById("mId").textContent = `${c.id} | ${c.rarity} | ${c.type}`;
+  document.getElementById("mName").textContent = c.name || "";
+  document.getElementById("mSrc").textContent = `入手: ${normalizeSource(c.source)}`;
+
+  // バッジ
+  document.getElementById("badgeLeft").textContent = `${currentIndex+1}/${arr.length}`;
+  document.getElementById("badgeRight").textContent = c.picked ? "⭐ 候補" : "—";
+
+  // 全体ステータス
+  const totalPicked = cards.filter(x=>x.picked).length;
+  stat.textContent = `候補⭐: ${totalPicked} / 全${cards.length}`;
+}
+
+function gotoNext(){
+  const arr = filteredCards();
+  if(arr.length===0) return;
+  currentIndex = Math.min(currentIndex+1, arr.length-1);
+  renderBrowse();
+}
+
+function gotoPrev(){
+  const arr = filteredCards();
+  if(arr.length===0) return;
+  currentIndex = Math.max(currentIndex-1, 0);
+  renderBrowse();
+}
+
+function togglePick(setTo){
+  const arr = filteredCards();
+  if(arr.length===0) return;
+  const c = arr[currentIndex];
+  if(setTo === true) c.picked = true;
+  else if(setTo === false) c.picked = false;
+  else c.picked = !c.picked;
+  saveState();
+  renderBrowse();
+}
+
+function setView(mode){
+  viewMode = mode;
+  document.getElementById("browseView").classList.toggle("hidden", mode!=="browse");
+  document.getElementById("pickView").classList.toggle("hidden", mode!=="pick");
+  document.getElementById("browseBar").classList.toggle("hidden", mode!=="browse");
+  document.getElementById("pickBar").classList.toggle("hidden", mode!=="pick");
+  document.getElementById("tabBrowse").classList.toggle("primary", mode==="browse");
+  document.getElementById("tabPick").classList.toggle("primary", mode==="pick");
+  if(mode==="browse") renderBrowse();
+  else renderPickList();
+}
+
+function renderPickList(){
+  const list = document.getElementById("pickList");
+  list.innerHTML = "";
+
+  let picked = cards.filter(c=>c.picked).slice().sort(byId);
+  if(pickFilter==="NEED") picked = picked.filter(c=>!c.owned);
+  if(pickFilter==="OWNED") picked = picked.filter(c=>c.owned);
+
+  const ownedCount = cards.filter(c=>c.picked && c.owned).length;
+  const pickedCount = cards.filter(c=>c.picked).length;
+  document.getElementById("pickSummary").textContent =
+    `候補⭐ ${pickedCount}件（所持 ${ownedCount}件） / 表示 ${picked.length}件（ID順）`;
+
+  for(const c of picked){
+    const el = document.createElement("div");
+    el.className = "item";
+    el.innerHTML = `
+      <div class="thumb"><img src="${c.image||""}" alt="${c.id}"></div>
+      <div>
+        <h3>${c.id}　${c.name||""}</h3>
+        <div class="small">入手: ${normalizeSource(c.source)}</div>
+        <div class="chk">
+          <label><input type="checkbox" ${c.owned ? "checked":""}/> 所持（購入済み）</label>
+        </div>
+        <div class="small">入手メモ（店/日付/価格など）</div>
+        <textarea placeholder="例）秋葉原○○ / 2026-02-05 / ¥300">${c.memo||""}</textarea>
+      </div>
+    `;
+    const chk = el.querySelector("input[type=checkbox]");
+    const ta = el.querySelector("textarea");
+    chk.addEventListener("change", ()=>{
+      c.owned = chk.checked;
+      saveState();
+      renderPickList(); // 集計反映
+    });
+    ta.addEventListener("input", ()=>{
+      c.memo = ta.value;
+      saveState();
+    });
+    list.appendChild(el);
+  }
+}
+
+function setupSwipe(){
+  const card = document.getElementById("card");
+  let startX=0, dx=0;
+  card.addEventListener("touchstart", (e)=>{
+    if(e.touches.length!==1) return;
+    startX = e.touches[0].clientX;
+    dx=0;
+  }, {passive:true});
+  card.addEventListener("touchmove", (e)=>{
+    if(e.touches.length!==1) return;
+    dx = e.touches[0].clientX - startX;
+  }, {passive:true});
+  card.addEventListener("touchend", ()=>{
+    if(Math.abs(dx) < 40) return;
+    if(dx < 0) gotoNext();
+    else gotoPrev();
+  });
+}
+
+// export / import（バックアップ）
+function exportState(){
+  const data = {
+    meta:{ exportedAt: new Date().toISOString(), version:1 },
+    cards: cards.map(c=>({id:c.id, picked:!!c.picked, owned:!!c.owned, memo:c.memo||""}))
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], {type:"application/json"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "opcg_state.json";
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+function importStateFile(file){
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    try{
+      const data = JSON.parse(reader.result);
+      const map = new Map((data.cards||[]).map(x=>[x.id,x]));
+      for(const c of cards){
+        const st = map.get(c.id);
+        if(st){
+          c.picked = !!st.picked;
+          c.owned = !!st.owned;
+          c.memo = st.memo || "";
+        }
+      }
+      saveState();
+      if(viewMode==="browse") renderBrowse(); else renderPickList();
+      alert("インポートしました");
+    }catch(e){
+      alert("インポート失敗: JSON形式を確認してください");
+    }
+  };
+  reader.readAsText(file, "utf-8");
+}
+
+const EMBEDDED_CARDS = [{"id": "EB01-003_p3", "name": "キッド&キラー", "rarity": "SPカード", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/EB01-003_p3.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP06-093_p3", "name": "ペローナ", "rarity": "SPカード", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP06-093_p3.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP07-046_p2", "name": "センゴク", "rarity": "SPカード", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP07-046_p2.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP09-051_p5", "name": "バギー", "rarity": "SPカード", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP09-051_p5.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP09-051_p6", "name": "バギー", "rarity": "SPカード", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP09-051_p6.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP10-065_p1", "name": "シュガー", "rarity": "SPカード", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP10-065_p1.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP12-030_p2", "name": "ジュラキュール・ミホーク", "rarity": "SPカード", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP12-030_p2.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-001", "name": "トラファルガー・ロー", "rarity": "L", "type": "LEADER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-001.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-001_p1", "name": "トラファルガー・ロー", "rarity": "L", "type": "LEADER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-001_p1.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-002", "name": "ウルージ", "rarity": "UC", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-002.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-003", "name": "カポネ・ベッジ", "rarity": "C", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-003.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-004", "name": "キャベンディッシュ", "rarity": "UC", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-004.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-005", "name": "キラー", "rarity": "C", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-005.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-006", "name": "シャチ＆ペンギン", "rarity": "C", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-006.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-007", "name": "ジュエリー・ボニー", "rarity": "C", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-007.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-008", "name": "スクラッチメン・アプー", "rarity": "C", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-008.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-009", "name": "トラファルガー・ロー", "rarity": "SR", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-009.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-009_p1", "name": "トラファルガー・ロー", "rarity": "SR", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-009_p1.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-010", "name": "バジル・ホーキンス", "rarity": "UC", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-010.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-011", "name": "バルトロメオ", "rarity": "UC", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-011.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-012", "name": "ベポ", "rarity": "C", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-012.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-013", "name": "モンキー・Ｄ・ルフィ", "rarity": "SR", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-013.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-013_p1", "name": "モンキー・Ｄ・ルフィ", "rarity": "SR", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-013_p1.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-014", "name": "ユースタス・キッド", "rarity": "R", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-014.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-015", "name": "ロロノア・ゾロ", "rarity": "R", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-015.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-015_p1", "name": "ロロノア・ゾロ", "rarity": "R", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-015_p1.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-016", "name": "Ｘ・ドレーク", "rarity": "R", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-016.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-017", "name": "シャンブルズ", "rarity": "C", "type": "EVENT", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-017.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-018", "name": "反撃に出るぞ", "rarity": "R", "type": "EVENT", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-018.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-019", "name": "「四皇」を一人…!!!引きずり降ろす“策”がある", "rarity": "UC", "type": "EVENT", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-019.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-020", "name": "ジュラキュール・ミホーク", "rarity": "L", "type": "LEADER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-020.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-020_p1", "name": "ジュラキュール・ミホーク", "rarity": "L", "type": "LEADER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-020_p1.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-021", "name": "イッショウ", "rarity": "C", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-021.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-022", "name": "ウソップ", "rarity": "UC", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-022.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-023", "name": "菊之丞", "rarity": "R", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-023.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-024", "name": "錦えもん", "rarity": "C", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-024.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-025", "name": "クロ", "rarity": "C", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-025.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-026", "name": "光月おでん", "rarity": "UC", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-026.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-027", "name": "シャンクス", "rarity": "R", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-027.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-027_p1", "name": "シャンクス", "rarity": "R", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-027_p1.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-028", "name": "ジョニー", "rarity": "C", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-028.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-029", "name": "たしぎ", "rarity": "R", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-029.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-030", "name": "チャカ＆ペル", "rarity": "C", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-030.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-031", "name": "ナミ", "rarity": "SR", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-031.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-031_p1", "name": "ナミ", "rarity": "SR", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-031_p1.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-032", "name": "ヒューマンドリル", "rarity": "UC", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-032.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-033", "name": "ペローナ", "rarity": "SR", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-033.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-033_p1", "name": "ペローナ", "rarity": "SR", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-033_p1.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-034", "name": "モンキー・Ｄ・ルフィ", "rarity": "R", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-034.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-035", "name": "ヨサク", "rarity": "C", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-035.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-036", "name": "このおれを越えてみよロロノア!!!", "rarity": "C", "type": "EVENT", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-036.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-037", "name": "ヒマつぶし", "rarity": "R", "type": "EVENT", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-037.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-038", "name": "虫ケラの顔など いちいち覚えちゃいない!!!", "rarity": "UC", "type": "EVENT", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-038.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-039", "name": "棺船", "rarity": "UC", "type": "STAGE", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-039.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-040", "name": "ジンベエ", "rarity": "L", "type": "LEADER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-040.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-040_p1", "name": "ジンベエ", "rarity": "L", "type": "LEADER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-040_p1.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-041", "name": "ボア・ハンコック", "rarity": "L", "type": "LEADER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-041.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-041_p1", "name": "ボア・ハンコック", "rarity": "L", "type": "LEADER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-041_p1.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-042", "name": "アーロン", "rarity": "R", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-042.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-042_p1", "name": "アーロン", "rarity": "R", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-042_p1.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-043", "name": "アラディン", "rarity": "R", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-043.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-044", "name": "エドワード・ニューゲート", "rarity": "C", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-044.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-045", "name": "クロオビ", "rarity": "UC", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-045.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-046", "name": "コアラ", "rarity": "UC", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-046.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-047", "name": "しらほし", "rarity": "R", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-047.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-048", "name": "シリュウ", "rarity": "C", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-048.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-049", "name": "ジンベエ", "rarity": "SR", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-049.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-049_p1", "name": "ジンベエ", "rarity": "SR", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-049_p1.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-050", "name": "チュウ", "rarity": "UC", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-050.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-051", "name": "はっちゃん", "rarity": "C", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-051.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-052", "name": "ハンニャバル", "rarity": "C", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-052.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-053", "name": "ビスタ", "rarity": "C", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-053.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-054", "name": "フィッシャー・タイガー", "rarity": "UC", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-054.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-055", "name": "マクロ一味", "rarity": "C", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-055.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-056", "name": "ワダツミ", "rarity": "C", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-056.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-057", "name": "安心せい!!わしがおる!!!", "rarity": "C", "type": "EVENT", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-057.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-058", "name": "海流一本背負い", "rarity": "R", "type": "EVENT", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-058.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-059", "name": "わしも連れて行ってくれ!!!必ず役に立つ!!!", "rarity": "UC", "type": "EVENT", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-059.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-060", "name": "ドンキホーテ・ドフラミンゴ", "rarity": "L", "type": "LEADER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-060.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-060_p1", "name": "ドンキホーテ・ドフラミンゴ", "rarity": "L", "type": "LEADER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-060_p1.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-061", "name": "ヴェルゴ", "rarity": "R", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-061.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-061_p1", "name": "ヴェルゴ", "rarity": "R", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-061_p1.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-062", "name": "グラディウス", "rarity": "C", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-062.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-063", "name": "シュガー", "rarity": "R", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-063.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-064", "name": "ジョーラ", "rarity": "C", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-064.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-065", "name": "セニョール・ピンク", "rarity": "C", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-065.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-066", "name": "ディアマンテ", "rarity": "C", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-066.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-067", "name": "デリンジャー", "rarity": "UC", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-067.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-068", "name": "トレーボル", "rarity": "UC", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-068.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-069", "name": "ドンキホーテ・ドフラミンゴ", "rarity": "SR", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-069.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-069_p1", "name": "ドンキホーテ・ドフラミンゴ", "rarity": "SR", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-069_p1.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-070", "name": "バッファロー", "rarity": "C", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-070.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-071", "name": "ピーカ", "rarity": "UC", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-071.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-072", "name": "ベビー５", "rarity": "UC", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-072.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-073", "name": "マッハバイス", "rarity": "C", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-073.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-074", "name": "モネ", "rarity": "R", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-074.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-075", "name": "ラオG", "rarity": "C", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-075.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-076", "name": "海原白波", "rarity": "R", "type": "EVENT", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-076.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-077", "name": "五色糸", "rarity": "UC", "type": "EVENT", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-077.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-078", "name": "弾糸", "rarity": "C", "type": "EVENT", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-078.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-079", "name": "クロコダイル", "rarity": "L", "type": "LEADER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-079.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-079_p1", "name": "クロコダイル", "rarity": "L", "type": "LEADER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-079_p1.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-080", "name": "ゲッコー・モリア", "rarity": "L", "type": "LEADER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-080.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-080_p1", "name": "ゲッコー・モリア", "rarity": "L", "type": "LEADER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-080_p1.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-081", "name": "スパイダーマウス", "rarity": "C", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-081.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-082", "name": "ブヒチャック", "rarity": "C", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-082.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-083", "name": "ミス・ウェンズデー", "rarity": "UC", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-083.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-084", "name": "ミス・オールサンデー", "rarity": "SR", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-084.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-084_p1", "name": "ミス・オールサンデー", "rarity": "SR", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-084_p1.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-085", "name": "ミス・ゴールデンウィーク(マリアンヌ)", "rarity": "UC", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-085.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-086", "name": "ミス・ダブルフィンガー(ザラ)", "rarity": "C", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-086.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-087", "name": "ミス・バレンタイン(ミキータ)", "rarity": "R", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-087.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-088", "name": "ミス・メリークリスマス(ドロフィー)", "rarity": "C", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-088.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-089", "name": "リューマ", "rarity": "C", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-089.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-090", "name": "Mr.1(ダズ・ボーネス)", "rarity": "R", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-090.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-090_p1", "name": "Mr.1(ダズ・ボーネス)", "rarity": "R", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-090_p1.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-091", "name": "Mr.2・ボン・クレー(ベンサム)", "rarity": "SR", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-091.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-091_p1", "name": "Mr.2・ボン・クレー(ベンサム)", "rarity": "SR", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-091_p1.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-092", "name": "Mr.3(ギャルディーノ)", "rarity": "R", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-092.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-093", "name": "Mr.4(ベーブ)", "rarity": "C", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-093.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-094", "name": "Mr.5(ジェム)", "rarity": "UC", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-094.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-095", "name": "Mr.9", "rarity": "C", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-095.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-096", "name": "浸食輪廻", "rarity": "R", "type": "EVENT", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-096.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-096_p1", "name": "浸食輪廻", "rarity": "R", "type": "EVENT", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-096_p1.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-097", "name": "早くおれを海賊王にならせろ!!!", "rarity": "UC", "type": "EVENT", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-097.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-098", "name": "三日月形砂丘", "rarity": "C", "type": "EVENT", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-098.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-099", "name": "不服か？", "rarity": "UC", "type": "EVENT", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-099.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-100", "name": "アブサロム", "rarity": "R", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-100.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-101", "name": "オーズ", "rarity": "C", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-101.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-102", "name": "クマシー", "rarity": "C", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-102.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-103", "name": "グロリオーサ(ニョン婆)", "rarity": "C", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-103.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-104", "name": "ゲッコー・モリア", "rarity": "SR", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-104.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-104_p1", "name": "ゲッコー・モリア", "rarity": "SR", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-104_p1.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-105", "name": "ゴルゴン三姉妹", "rarity": "UC", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-105.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-106", "name": "サロメ", "rarity": "C", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-106.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-107", "name": "シャクヤク", "rarity": "UC", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-107.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-108", "name": "シルバーズ・レイリー", "rarity": "R", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-108.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-109", "name": "ビクトリア・シンドリー", "rarity": "C", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-109.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-110", "name": "ドクトル・ホグバック", "rarity": "R", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-110.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-111", "name": "ペローナ", "rarity": "R", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-111.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-111_p1", "name": "ペローナ", "rarity": "R", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-111_p1.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-112", "name": "ボア・ハンコック", "rarity": "SR", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-112.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-112_p1", "name": "ボア・ハンコック", "rarity": "SR", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-112_p1.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-112_p2", "name": "ボア・ハンコック", "rarity": "SPカード", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-112_p2.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-113", "name": "マーガレット", "rarity": "UC", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-113.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-114", "name": "ラン", "rarity": "UC", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-114.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-115", "name": "リンドウ", "rarity": "C", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-115.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-116", "name": "炎の蛇神", "rarity": "C", "type": "EVENT", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-116.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-117", "name": "欠片蝙蝠", "rarity": "UC", "type": "EVENT", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-117.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-118", "name": "わらわ　こわい…♡", "rarity": "R", "type": "EVENT", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-118.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-118_p1", "name": "わらわ　こわい…♡", "rarity": "R", "type": "EVENT", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-118_p1.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-119", "name": "ジュラキュール・ミホーク", "rarity": "SEC", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-119.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-119_p1", "name": "ジュラキュール・ミホーク", "rarity": "SEC", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-119_p1.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-119_p2", "name": "ジュラキュール・ミホーク", "rarity": "SEC", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-119_p2.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-120", "name": "クロコダイル", "rarity": "SEC", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-120.png?260130", "picked": false, "owned": false, "memo": ""}, {"id": "OP14-120_p1", "name": "クロコダイル", "rarity": "SEC", "type": "CHARACTER", "source": "ブースターパック 蒼海の七傑【OP-14】", "image": "https://www.onepiece-cardgame.com/images/cardlist/card/OP14-120_p1.png?260130", "picked": false, "owned": false, "memo": ""}];
+
+async function init(){
+  cards = EMBEDDED_CARDS;
+  // source normalize
+  for(const c of cards){
+    c.source = c.source || "";
+    c.name = c.name || "";
+    c.image = c.image || "";
+    c.memo = c.memo || "";
+    c.picked = !!c.picked;
+    c.owned = !!c.owned;
+  }
+  loadState();
+
+  // filter dropdown
+  const sel = document.getElementById("sourceFilter");
+  for(const s of getSources()){
+    const opt = document.createElement("option");
+    opt.value = s;
+    opt.textContent = (s==="ALL") ? "ALL（全種類）" : s;
+    sel.appendChild(opt);
+  }
+  sel.addEventListener("change", ()=>{
+    currentSource = sel.value;
+    currentIndex = 0;
+    renderBrowse();
+  });
+
+  // buttons
+  document.getElementById("nextBtn").onclick = gotoNext;
+  document.getElementById("prevBtn").onclick = gotoPrev;
+  document.getElementById("togglePicked").onclick = ()=>togglePick();
+  document.getElementById("pickBtn").onclick = ()=>togglePick(true);
+  document.getElementById("unpickBtn").onclick = ()=>togglePick(false);
+
+  // tabs
+  document.getElementById("tabBrowse").onclick = ()=>setView("browse");
+  document.getElementById("tabPick").onclick = ()=>setView("pick");
+
+  // pick filters
+  document.getElementById("filterAll").onclick = ()=>{pickFilter="ALL"; renderPickList();};
+  document.getElementById("filterNeed").onclick = ()=>{pickFilter="NEED"; renderPickList();};
+  document.getElementById("filterOwned").onclick = ()=>{pickFilter="OWNED"; renderPickList();};
+
+  // export/import
+  document.getElementById("exportBtn").onclick = exportState;
+  document.getElementById("importBtn").onclick = ()=>document.getElementById("importFile").click();
+  document.getElementById("importFile").addEventListener("change", (e)=>{
+    const f = e.target.files?.[0];
+    if(f) importStateFile(f);
+    e.target.value = "";
+  });
+
+  // keyboard
+  document.addEventListener("keydown", (e)=>{
+    if(viewMode!=="browse") return;
+    if(e.key==="ArrowRight") gotoNext();
+    if(e.key==="ArrowLeft") gotoPrev();
+    if(e.key===" ") { e.preventDefault(); togglePick(); }
+  });
+
+  setupSwipe();
+  renderBrowse();
+}
+init();
+</script>
+</body>
+</html>

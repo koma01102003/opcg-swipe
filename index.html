@@ -128,6 +128,195 @@
 }
 /* ===== end top tabs ===== */
 
+
+  /* browse search */
+  #browseSearch{
+    flex:1;
+    min-width:160px;
+    padding:8px 10px;
+    border-radius:10px;
+    border:1px solid #333;
+    background:#0f0f0f;
+    color:#fff;
+  }
+
+
+  /* browse-only "more filters" panel */
+  #browseMoreBtn{padding:8px 10px;border-radius:10px;border:1px solid #333;background:#1a1a1a;color:#fff;white-space:nowrap}
+  #browseMore{width:100%;margin-top:8px}
+
+
+  /* browse pick-status buttons (match colorBtn pills) */
+  #browseFilterAll,
+  #browseFilterUnpicked,
+  #browseFilterPicked{
+    padding:6px 10px;
+    border-radius:999px;
+    border:1px solid #333;
+    background:#1a1a1a;
+    color:#fff;
+    font-size:14px;
+    line-height:1.1;
+  }
+  #browseFilterAll.primary,
+  #browseFilterUnpicked.primary,
+  #browseFilterPicked.primary{
+    background:#153;
+    border-color:#4a6;
+  }
+
+
+/* ===== compact header + better spacing (2026-02) ===== */
+header{
+  padding:8px 10px;              /* was 10px 12px */
+}
+
+/* Header rows: slightly more breathing room between controls */
+header .row{ gap:12px; }          /* was 10px */
+header .topTabs{ margin-top:6px; gap:12px; } /* was margin-top:8px */
+
+/* Make controls a bit more compact without hurting usability */
+header select,
+header button,
+header input{
+  font-size:15px;                 /* was 16px */
+}
+
+/* Tweak generic header controls (leave pills/colorBtn sizing as-is) */
+header select,
+header button.primary,
+header button:not(.colorBtn):not(.pillBtn):not(.overlayPick),
+header input[type="search"]{
+  padding:7px 10px;               /* slightly smaller */
+  border-radius:12px;             /* slightly rounder */
+}
+
+/* Tabs: compact and balanced */
+.topTabs button{
+  padding:9px 10px;
+  font-size:14px;
+}
+
+/* Search boxes: align with compact header */
+#pickSearch,
+#browseSearch{
+  padding:7px 10px;
+  border-radius:12px;
+}
+
+/* Dropdown: reduce perceived height a touch */
+#sourceFilter{
+  padding-top:7px;
+  padding-bottom:7px;
+}
+
+/* Keep pill buttons readable while matching compact header tone */
+.colorBtn,
+.pillBtn{
+  font-size:14px;
+}
+
+/* Optional: reduce header vertical stacking feel */
+#browseBar{ margin-top:6px; }
+#pickBar{ margin-top:6px; }
+/* ===== end ===== */
+
+
+/* ===== header alignment fine-tune ===== */
+
+/* 条件ボタンと検索ボックスの高さを完全に揃える */
+#browseMoreBtn,
+#pickMoreBtn{
+  padding:7px 10px;      /* 検索ボックスと同じ */
+  font-size:15px;
+  line-height:1.2;
+  border-radius:12px;
+}
+
+/* 検索ボックス側も明示的に同条件に */
+#browseSearch,
+#pickSearch{
+  padding:7px 10px;
+  font-size:15px;
+  line-height:1.2;
+  border-radius:12px;
+}
+
+/* プルダウン直下の余白を詰める */
+#browseBar{
+  margin-bottom:4px;     /* was larger */
+}
+#pickBarTop{
+  margin-bottom:4px;
+}
+
+/* select 自体の縦サイズを微調整 */
+#sourceFilter{
+  padding-top:7px;
+  padding-bottom:7px;
+  font-size:15px;
+}
+
+/* ===== end fine-tune ===== */
+
+
+/* ===== tighten gap between dropdown and condition/search ===== */
+
+/* browse */
+#browseBar{
+  row-gap:6px;          /* default gap is larger via .row */
+  margin-bottom:2px;    /* tighten purple area */
+}
+
+/* pick */
+#pickBarTop{
+  row-gap:6px;
+  margin-bottom:2px;
+}
+
+/* ensure row uses row-gap when wrapping */
+.row{
+  row-gap:6px;
+}
+
+/* ===== end tighten ===== */
+
+
+/* ===== tighten gap inside pick conditions ===== */
+
+/* 候補タブ：条件行とフィルタ行の縦余白をさらに詰める */
+#pickBar{
+  row-gap:6px;
+}
+
+#pickBar .row{
+  row-gap:6px;
+}
+
+/* 条件＋検索の行と、未所持/色ボタン行の間 */
+#pickBarTop{
+  margin-bottom:2px;
+}
+
+/* ===== end tighten pick ===== */
+
+
+/* ===== swipe animation (lightweight) ===== */
+.card{
+  will-change: transform;
+}
+.card.isDragging{
+  transition: none !important;
+}
+.card.isAnimating{
+  transition: transform 160ms ease-out;
+}
+/* Respect reduced-motion */
+@media (prefers-reduced-motion: reduce){
+  .card.isAnimating{ transition: none !important; }
+}
+/* ===== end swipe animation ===== */
+
 </style>
 </head>
 <body>
@@ -141,9 +330,30 @@
     <button id="tabPick">候補（⭐）</button>
   </div>
   <div class="row" id="browseBar">
-    
-    <select id="sourceFilter"></select>
+<select id="sourceFilter"></select>
 
+    <button id="browseMoreBtn" class="primary">条件 ▾</button>
+
+    <input id="browseSearch" type="search" placeholder="検索: ID / 名前"/>
+
+  </div>
+  <div id="browseMore" class="hidden">
+    <div class="row">
+      <button id="browseFilterAll" class="primary">全部</button>
+      <button id="browseFilterUnpicked">未選択</button>
+      <button id="browseFilterPicked">候補⭐</button>
+    </div>
+    <div class="row">
+      <div class="colorGrid" id="browseColorBtns">
+        <button type="button" class="colorBtn all on" data-color="ALL">全色</button>
+        <button type="button" class="colorBtn" data-color="赤">赤</button>
+        <button type="button" class="colorBtn" data-color="緑">緑</button>
+        <button type="button" class="colorBtn" data-color="青">青</button>
+        <button type="button" class="colorBtn" data-color="紫">紫</button>
+        <button type="button" class="colorBtn" data-color="黒">黒</button>
+        <button type="button" class="colorBtn" data-color="黄">黄</button>
+      </div>
+    </div>
   </div>
   <div class="row hidden" id="pickBar">
     <div class="row" id="pickBarTop">
@@ -226,7 +436,10 @@ let viewMode = "browse"; // browse | pick
 let currentIndex = 0;
 let currentSource = "ALL";
 let pickFilter = "NEED"; // ALL | NEED | OWNED（デフォルト: 未所持）
-let pickMoreOpen = false; // 候補タブの条件パネル開閉
+let browseMoreOpen = false; // 仕分けタブの条件パネル開閉
+let browsePickFilter = "ALL"; // ALL | UNPICKED | PICKED
+let browseColors = new Set(); // 空=全色（仕分け側）
+let pickMoreOpen = true; // 候補タブの条件パネル開閉（初期ON）
 let pickColors = new Set(); // 空=全色
 
 function loadState(){
@@ -271,6 +484,46 @@ function saveState(){
 
 let SOURCE_LABELS = new Map();
 
+
+function rebuildSourceFilterOptions(){
+  const sel = document.getElementById("sourceFilter");
+  if(!sel) return;
+
+  const byKey = new Map(); // key -> {label, total, picked}
+  for(const c of cards){
+    const key = normalizeSourceKey(c.source) || "ALL";
+    if(!byKey.has(key)){
+      byKey.set(key, {label: displaySource(c.source) || key, total:0, picked:0});
+    }
+    const o = byKey.get(key);
+    o.total++;
+    if(c.picked) o.picked++;
+  }
+
+  const allTotal = cards.length;
+  const allPicked = cards.filter(c=>c.picked).length;
+
+  const prev = sel.value || "ALL";
+  sel.innerHTML = "";
+
+  const add = (val, text)=>{
+    const opt = document.createElement("option");
+    opt.value = val;
+    opt.textContent = text;
+    sel.appendChild(opt);
+  };
+
+  add("ALL", `ALL（⭐ ${allPicked} / ${allTotal}）`);
+
+  const keys = Array.from(byKey.keys()).filter(k=>k!=="ALL").sort();
+  for(const k of keys){
+    const o = byKey.get(k);
+    add(k, `${o.label}（⭐ ${o.picked} / ${o.total}）`);
+  }
+
+  sel.value = prev;
+}
+
 function getSources(){
   SOURCE_LABELS = new Map();
   for(const c of cards){
@@ -283,8 +536,32 @@ function getSources(){
 }
 
 function filteredCards(){
-  if(currentSource==="ALL") return cards;
-  return cards.filter(c => normalizeSourceKey(c.source)===currentSource);
+  // source filter
+  let arr = (currentSource==="ALL") ? cards : cards.filter(c => normalizeSourceKey(c.source)===currentSource);
+
+  // browse search (ID / 名前) — browse表示時のみ適用
+  if(viewMode === "browse"){
+    const q = (document.getElementById("browseSearch")?.value || "").trim().toLowerCase();
+    if(q){
+      arr = arr.filter(c =>
+        (c.id||"").toLowerCase().includes(q) ||
+        (c.name||"").toLowerCase().includes(q)
+      );
+    }
+
+    // 仕分け側：未選択 / 候補⭐ フィルタ
+    if(browsePickFilter === "UNPICKED") arr = arr.filter(c => !c.picked);
+    if(browsePickFilter === "PICKED")   arr = arr.filter(c =>  !!c.picked);
+
+    // 仕分け側：色フィルタ（複数選択OR）
+    if(browseColors.size > 0){
+      arr = arr.filter(c =>
+        Array.isArray(c.colors) && c.colors.some(x => browseColors.has(x))
+      );
+    }
+  }
+
+  return arr;
 }
 
 function ensureIndexInRange(){
@@ -308,6 +585,7 @@ function renderBrowse(){
   ensureIndexInRange();
   const arr = filteredCards();
   updateTabLabels();
+  rebuildSourceFilterOptions();
 if(arr.length===0){
     // フィルタ結果が0件
     document.getElementById("badgeLeft").textContent = "0/0";
@@ -374,10 +652,15 @@ function setView(mode){
   document.getElementById("pickView").classList.toggle("hidden", mode!=="pick");
   document.getElementById("browseBar").classList.toggle("hidden", mode!=="browse");
   document.getElementById("pickBar").classList.toggle("hidden", mode!=="pick");
+  // browse-only panel should never appear in pick view
+  const bm = document.getElementById("browseMore");
+  if(bm) bm.classList.toggle("hidden", mode!=="browse" || !browseMoreOpen);
+  if(mode!=="browse") browseMoreOpen = false;
   document.getElementById("tabBrowse").classList.toggle("primary", mode==="browse");
   document.getElementById("tabPick").classList.toggle("primary", mode==="pick");
-  if(mode==="browse") renderBrowse();
-  else { pickFilter = "NEED"; updatePickFilterButtons(); setPickMoreOpen(false); renderPickList(); }
+  if(mode==="browse") { setPickMoreOpen(false); setBrowseMoreOpen(false); updateBrowseFilterButtons(); refreshBrowseColorButtons(); renderBrowse(); }
+  else { pickFilter = "NEED"; updatePickFilterButtons(); setPickMoreOpen(false); setPickMoreOpen(true);
+    renderPickList(); }
 }
 
 
@@ -390,6 +673,36 @@ function setPickMoreOpen(open){
   if(btn) btn.textContent = pickMoreOpen ? "条件 ▴" : "条件 ▾";
 }
 
+
+function setBrowseMoreOpen(open){
+  browseMoreOpen = !!open;
+  const panel = document.getElementById("browseMore");
+  const btn = document.getElementById("browseMoreBtn");
+  if(panel) panel.classList.toggle("hidden", !browseMoreOpen);
+  if(btn) btn.textContent = browseMoreOpen ? "条件 ▴" : "条件 ▾";
+}
+
+function updateBrowseFilterButtons(){
+  const set = (id, active)=>document.getElementById(id).classList.toggle("primary", active);
+  set("browseFilterAll", browsePickFilter==="ALL");
+  set("browseFilterUnpicked", browsePickFilter==="UNPICKED");
+  set("browseFilterPicked", browsePickFilter==="PICKED");
+}
+
+function refreshBrowseColorButtons(){
+  const wrap = document.getElementById("browseColorBtns");
+  if(!wrap) return;
+  const any = browseColors.size > 0;
+  for(const btn of wrap.querySelectorAll("button[data-color]")){
+    const col = btn.getAttribute("data-color");
+    if(col === "ALL"){
+      btn.classList.toggle("on", !any);
+    }else{
+      btn.classList.toggle("on", browseColors.has(col));
+    }
+  }
+}
+
 function updatePickFilterButtons(){
   const set = (id, active)=>document.getElementById(id).classList.toggle("primary", active);
   set("filterAll", pickFilter==="ALL");
@@ -400,6 +713,7 @@ function updatePickFilterButtons(){
 function renderPickList(){
   
   updateTabLabels();
+  rebuildSourceFilterOptions();
 const list = document.getElementById("pickList");
   list.innerHTML = "";
 
@@ -464,7 +778,8 @@ const list = document.getElementById("pickList");
       holdTimer = setTimeout(()=>{
         c.picked = false;
         saveState();
-        renderPickList();
+        setPickMoreOpen(true);
+    renderPickList();
       }, HOLD_MS);
     };
     const endHold = ()=>{
@@ -485,7 +800,8 @@ const list = document.getElementById("pickList");
 ownedBtn.addEventListener("click", ()=>{
       c.owned = !c.owned;
       saveState();
-      renderPickList(); // 集計反映
+      setPickMoreOpen(true);
+    renderPickList(); // 集計反映
     });
 ta.addEventListener("input", ()=>{
       c.memo = ta.value;
@@ -497,20 +813,106 @@ ta.addEventListener("input", ()=>{
 
 function setupSwipe(){
   const card = document.getElementById("card");
-  let startX=0, dx=0;
-  card.addEventListener("touchstart", (e)=>{
-    if(e.touches.length!==1) return;
-    startX = e.touches[0].clientX;
-    dx=0;
-  }, {passive:true});
-  card.addEventListener("touchmove", (e)=>{
-    if(e.touches.length!==1) return;
-    dx = e.touches[0].clientX - startX;
-  }, {passive:true});
-  card.addEventListener("touchend", ()=>{
-    if(Math.abs(dx) < 40) return;
-    if(dx < 0) gotoNext();
-    else gotoPrev();
+  if(!card) return;
+
+  let startX=0, dx=0, dragging=false, animating=false;
+  const THRESH = 40;
+
+  const setTransform = (x)=>{
+    // small rotate gives feedback but is cheap
+    const rot = Math.max(-6, Math.min(6, x/30));
+    card.style.transform = `translateX(${x}px) rotate(${rot}deg)`;
+  };
+
+  const resetTransform = ()=>{
+    card.style.transform = "";
+  };
+
+  const onStart = (e)=>{
+    if(animating) return;
+    if(e.touches && e.touches.length!==1) return;
+    dragging = true;
+    startX = e.touches ? e.touches[0].clientX : e.clientX;
+    dx = 0;
+    card.classList.add("isDragging");
+  };
+
+  const onMove = (e)=>{
+    if(!dragging || animating) return;
+    const x = e.touches ? e.touches[0].clientX : e.clientX;
+    dx = x - startX;
+    // Use rAF to avoid layout thrash
+    requestAnimationFrame(()=>setTransform(dx));
+  };
+
+  const endWithSnapBack = ()=>{
+    animating = true;
+    card.classList.remove("isDragging");
+    card.classList.add("isAnimating");
+    setTransform(0);
+    const done = ()=>{
+      card.classList.remove("isAnimating");
+      animating = false;
+      resetTransform();
+      card.removeEventListener("transitionend", done);
+    };
+    card.addEventListener("transitionend", done);
+  };
+
+  const endWithSwipe = (dir)=>{ // dir: -1 next, +1 prev
+    animating = true;
+    card.classList.remove("isDragging");
+    card.classList.add("isAnimating");
+
+    const offX = dir < 0 ? -window.innerWidth : window.innerWidth;
+    setTransform(offX);
+
+    const done = ()=>{
+      card.removeEventListener("transitionend", done);
+      card.classList.remove("isAnimating");
+      animating = false;
+      resetTransform();
+      // After animation, change card
+      if(dir < 0) gotoNext();
+      else gotoPrev();
+    };
+    card.addEventListener("transitionend", done);
+  };
+
+  const onEnd = ()=>{
+    if(!dragging || animating) return;
+    dragging = false;
+
+    if(Math.abs(dx) < THRESH){
+      endWithSnapBack();
+      return;
+    }
+    endWithSwipe(dx < 0 ? -1 : +1);
+  };
+
+  // Touch (mobile)
+  card.addEventListener("touchstart", onStart, {passive:true});
+  card.addEventListener("touchmove", onMove, {passive:true});
+  card.addEventListener("touchend", onEnd);
+  card.addEventListener("touchcancel", onEnd);
+
+  // Pointer (desktop)
+  card.addEventListener("pointerdown", (e)=>{
+    if(e.pointerType === "touch") return; // touch handled above
+    card.setPointerCapture?.(e.pointerId);
+    onStart(e);
+  });
+  card.addEventListener("pointermove", (e)=>{
+    if(e.pointerType === "touch") return;
+    onMove(e);
+  });
+  card.addEventListener("pointerup", (e)=>{
+    if(e.pointerType === "touch") return;
+    onEnd();
+  });
+  card.addEventListener("pointercancel", (e)=>{
+    if(e.pointerType === "touch") return;
+    onEnd();
   });
 }
 
@@ -539,6 +941,7 @@ async function init(){
 
   // filter dropdown
   const sel = document.getElementById("sourceFilter");
+  rebuildSourceFilterOptions();
   for(const s of getSources()){
     const opt = document.createElement("option");
     opt.value = s;
@@ -550,6 +953,47 @@ async function init(){
     currentIndex = 0;
     renderBrowse();
   });
+
+  // browse filters
+  const bMoreBtn = document.getElementById("browseMoreBtn");
+  if(bMoreBtn) bMoreBtn.addEventListener("click", ()=>setBrowseMoreOpen(!browseMoreOpen));
+
+  const bAll = document.getElementById("browseFilterAll");
+  const bUnp = document.getElementById("browseFilterUnpicked");
+  const bPic = document.getElementById("browseFilterPicked");
+
+  if(bAll) bAll.addEventListener("click", ()=>{ browsePickFilter="ALL"; updateBrowseFilterButtons(); currentIndex=0; renderBrowse(); });
+  if(bUnp) bUnp.addEventListener("click", ()=>{ browsePickFilter="UNPICKED"; updateBrowseFilterButtons(); currentIndex=0; renderBrowse(); });
+  if(bPic) bPic.addEventListener("click", ()=>{ browsePickFilter="PICKED"; updateBrowseFilterButtons(); currentIndex=0; renderBrowse(); });
+
+  updateBrowseFilterButtons();
+
+  const bcw = document.getElementById("browseColorBtns");
+  if(bcw){
+    bcw.addEventListener("click", (e)=>{
+      const btn = e.target.closest("button[data-color]");
+      if(!btn) return;
+      const col = btn.getAttribute("data-color");
+      if(col === "ALL") browseColors.clear();
+      else{
+        if(browseColors.has(col)) browseColors.delete(col);
+        else browseColors.add(col);
+      }
+      refreshBrowseColorButtons();
+      currentIndex = 0;
+      renderBrowse();
+    });
+    refreshBrowseColorButtons();
+  }
+
+  const bs = document.getElementById("browseSearch");
+  if(bs){
+    bs.addEventListener("input", ()=>{
+      if(viewMode!=="browse") return;
+      currentIndex = 0;
+      renderBrowse();
+    });
+  }
 
   // buttons
   const $ = (id)=>document.getElementById(id);
@@ -568,11 +1012,15 @@ async function init(){
 
   // pick filters
   on("pickMoreBtn", ()=>setPickMoreOpen(!pickMoreOpen));
-  on("filterAll", ()=>{pickFilter="ALL"; updatePickFilterButtons(); renderPickList();});
-  on("filterNeed", ()=>{pickFilter="NEED"; updatePickFilterButtons(); renderPickList();});
-  on("filterOwned", ()=>{pickFilter="OWNED"; updatePickFilterButtons(); renderPickList();});
+  on("filterAll", ()=>{pickFilter="ALL"; updatePickFilterButtons(); setPickMoreOpen(true);
+    renderPickList();});
+  on("filterNeed", ()=>{pickFilter="NEED"; updatePickFilterButtons(); setPickMoreOpen(true);
+    renderPickList();});
+  on("filterOwned", ()=>{pickFilter="OWNED"; updatePickFilterButtons(); setPickMoreOpen(true);
+    renderPickList();});
 
-  const ps = $("pickSearch"); if(ps) ps.addEventListener("input", ()=>{ if(viewMode==="pick") renderPickList(); });
+  const ps = $("pickSearch"); if(ps) ps.addEventListener("input", ()=>{ if(viewMode==="pick") setPickMoreOpen(true);
+    renderPickList(); });
 
   // keyboard
   document.addEventListener("keydown", (e)=>{
@@ -611,7 +1059,8 @@ async function init(){
         else pickColors.add(col);
       }
       refreshPickColorButtons();
-      renderPickList();
+      setPickMoreOpen(true);
+    renderPickList();
     });
   
     refreshPickColorButtons();

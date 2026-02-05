@@ -300,23 +300,6 @@ header input[type="search"]{
 
 /* ===== end tighten pick ===== */
 
-
-/* ===== swipe animation (lightweight) ===== */
-.card{
-  will-change: transform;
-}
-.card.isDragging{
-  transition: none !important;
-}
-.card.isAnimating{
-  transition: transform 160ms ease-out;
-}
-/* Respect reduced-motion */
-@media (prefers-reduced-motion: reduce){
-  .card.isAnimating{ transition: none !important; }
-}
-/* ===== end swipe animation ===== */
-
 </style>
 </head>
 <body>
@@ -813,106 +796,20 @@ ta.addEventListener("input", ()=>{
 
 function setupSwipe(){
   const card = document.getElementById("card");
-  if(!card) return;
-
-  let startX=0, dx=0, dragging=false, animating=false;
-  const THRESH = 40;
-
-  const setTransform = (x)=>{
-    // small rotate gives feedback but is cheap
-    const rot = Math.max(-6, Math.min(6, x/30));
-    card.style.transform = `translateX(${x}px) rotate(${rot}deg)`;
-  };
-
-  const resetTransform = ()=>{
-    card.style.transform = "";
-  };
-
-  const onStart = (e)=>{
-    if(animating) return;
-    if(e.touches && e.touches.length!==1) return;
-    dragging = true;
-    startX = e.touches ? e.touches[0].clientX : e.clientX;
-    dx = 0;
-    card.classList.add("isDragging");
-  };
-
-  const onMove = (e)=>{
-    if(!dragging || animating) return;
-    const x = e.touches ? e.touches[0].clientX : e.clientX;
-    dx = x - startX;
-    // Use rAF to avoid layout thrash
-    requestAnimationFrame(()=>setTransform(dx));
-  };
-
-  const endWithSnapBack = ()=>{
-    animating = true;
-    card.classList.remove("isDragging");
-    card.classList.add("isAnimating");
-    setTransform(0);
-    const done = ()=>{
-      card.classList.remove("isAnimating");
-      animating = false;
-      resetTransform();
-      card.removeEventListener("transitionend", done);
-    };
-    card.addEventListener("transitionend", done);
-  };
-
-  const endWithSwipe = (dir)=>{ // dir: -1 next, +1 prev
-    animating = true;
-    card.classList.remove("isDragging");
-    card.classList.add("isAnimating");
-
-    const offX = dir < 0 ? -window.innerWidth : window.innerWidth;
-    setTransform(offX);
-
-    const done = ()=>{
-      card.removeEventListener("transitionend", done);
-      card.classList.remove("isAnimating");
-      animating = false;
-      resetTransform();
-      // After animation, change card
-      if(dir < 0) gotoNext();
-      else gotoPrev();
-    };
-    card.addEventListener("transitionend", done);
-  };
-
-  const onEnd = ()=>{
-    if(!dragging || animating) return;
-    dragging = false;
-
-    if(Math.abs(dx) < THRESH){
-      endWithSnapBack();
-      return;
-    }
-    endWithSwipe(dx < 0 ? -1 : +1);
-  };
-
-  // Touch (mobile)
-  card.addEventListener("touchstart", onStart, {passive:true});
-  card.addEventListener("touchmove", onMove, {passive:true});
-  card.addEventListener("touchend", onEnd);
-  card.addEventListener("touchcancel", onEnd);
-
-  // Pointer (desktop)
-  card.addEventListener("pointerdown", (e)=>{
-    if(e.pointerType === "touch") return; // touch handled above
-    card.setPointerCapture?.(e.pointerId);
-    onStart(e);
-  });
-  card.addEventListener("pointermove", (e)=>{
-    if(e.pointerType === "touch") return;
-    onMove(e);
-  });
-  card.addEventListener("pointerup", (e)=>{
-    if(e.pointerType === "touch") return;
-    onEnd();
-  });
-  card.addEventListener("pointercancel", (e)=>{
-    if(e.pointerType === "touch") return;
-    onEnd();
+  let startX=0, dx=0;
+  card.addEventListener("touchstart", (e)=>{
+    if(e.touches.length!==1) return;
+    startX = e.touches[0].clientX;
+    dx=0;
+  }, {passive:true});
+  card.addEventListener("touchmove", (e)=>{
+    if(e.touches.length!==1) return;
+    dx = e.touches[0].clientX - startX;
+  }, {passive:true});
+  card.addEventListener("touchend", ()=>{
+    if(Math.abs(dx) < 40) return;
+    if(dx < 0) gotoNext();
+    else gotoPrev();
   });
 }
 

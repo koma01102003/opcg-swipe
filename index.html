@@ -318,6 +318,48 @@ html, body{
 }
 /* ===== end iOS fix ===== */
 
+
+/* ===== candidate count flash (no card animation) ===== */
+@keyframes tabFlash{
+  0%{ filter:brightness(1); box-shadow: 0 0 0 0 rgba(74,166,102,0); }
+  25%{ filter:brightness(1.25); box-shadow: 0 0 0 3px rgba(74,166,102,.35); }
+  100%{ filter:brightness(1); box-shadow: 0 0 0 0 rgba(74,166,102,0); }
+}
+#tabPick.flash{
+  animation: tabFlash 260ms ease-out 1;
+}
+/* ===== end candidate count flash ===== */
+
+
+/* ===== candidate count star-only flash ===== */
+@keyframes starFlash{
+  0%{ filter:brightness(1); text-shadow:none; }
+  30%{ filter:brightness(1.4); text-shadow:0 0 6px rgba(255,215,0,.8); }
+  100%{ filter:brightness(1); text-shadow:none; }
+}
+.flashStar{
+  animation: starFlash 260ms ease-out 1;
+}
+/* ===== end star-only ===== */
+
+
+/* ===== auto advance button ===== */
+#autoNextBtn{
+  padding:7px 10px;
+  border-radius:12px;
+  border:1px solid #333;
+  background:#1a1a1a;
+  color:#fff;
+  font-size:15px;
+  white-space:nowrap;
+}
+#autoNextBtn.primary{
+  background:#153;
+  border-color:#4a6;
+  color:#eafff0;
+}
+/* ===== end auto ===== */
+
 </style>
 </head>
 <body>
@@ -336,6 +378,7 @@ html, body{
     <button id="browseMoreBtn" class="primary">条件 ▾</button>
 
     <input id="browseSearch" type="search" placeholder="検索: ID / 名前"/>
+    <button id="autoNextBtn">自動▶</button>
 
   </div>
   <div id="browseMore" class="hidden">
@@ -442,6 +485,63 @@ let browsePickFilter = "ALL"; // ALL | UNPICKED | PICKED
 let browseColors = new Set(); // 空=全色（仕分け側）
 let pickMoreOpen = true; // 候補タブの条件パネル開閉（初期ON）
 let pickColors = new Set(); // 空=全色
+let prevPickedCount = 0; // 候補数の増加検知（タブを一瞬光らせる）
+let autoNextOn = false;
+let autoNextTimer = null;
+let autoNextMs = 1200; // 自動送り間隔（ms）
+
+function setAutoNextOn(onFlag){
+  autoNextOn = !!onFlag;
+  const btn = document.getElementById("autoNextBtn");
+  if(btn){
+    btn.classList.toggle("primary", autoNextOn);
+    btn.textContent = autoNextOn ? "停止■" : "自動▶";
+  }
+
+  if(autoNextTimer){
+    clearInterval(autoNextTimer);
+    autoNextTimer = null;
+  }
+
+  if(autoNextOn){
+    autoNextTimer = setInterval(()=>{
+      if(viewMode !== "browse") return;
+
+      const arr = filteredCards();
+      if(arr.length === 0){
+        stopAutoNext("empty");
+        return;
+      }
+
+      // 🔁 auto mode only: loop back to start at the end
+      if(currentIndex >= arr.length - 1){
+        currentIndex = 0;
+        renderBrowse();
+      }else{
+        gotoNext();
+      }
+    }, autoNextMs);
+  }
+}
+
+function stopAutoNext(reason){
+  if(!autoNextOn) return;
+
+  autoNextOn = false;
+  if(autoNextTimer){
+    clearInterval(autoNextTimer);
+    autoNextTimer = null;
+  }
+  const btn = document.getElementById("autoNextBtn");
+  if(btn){
+    btn.classList.remove("primary");
+    btn.textContent = "自動▶";
+  }
+}
+
+
+
+
 
 function loadState(){
   const raw = localStorage.getItem(STATE_KEY);
@@ -582,8 +682,21 @@ function updateTabLabels(){
   const picked = cards.filter(x=>x.picked).length;
   const tb = document.getElementById("tabBrowse");
   const tp = document.getElementById("tabPick");
+
   if(tb) tb.textContent = `仕分け（全${total}）`;
-  if(tp) tp.textContent = `候補（⭐${picked}）`;
+
+  if(tp){
+    tp.innerHTML = `候補（<span id="pickCount">⭐${picked}</span>）`;
+
+    const pc = document.getElementById("pickCount");
+    if(pc && picked > prevPickedCount){
+      pc.classList.remove("flashStar");
+      void pc.offsetWidth;
+      pc.classList.add("flashStar");
+      setTimeout(()=>pc.classList.remove("flashStar"), 400);
+    }
+  }
+  prevPickedCount = picked;
 }
 
 function renderBrowse(){
@@ -671,6 +784,7 @@ function togglePick(setTo){
 
 function setView(mode){
   viewMode = mode;
+  if(mode!=="browse" && typeof stopAutoNext==="function") stopAutoNext("leave");
   document.getElementById("browseView").classList.toggle("hidden", mode!=="browse");
   document.getElementById("pickView").classList.toggle("hidden", mode!=="pick");
   document.getElementById("browseBar").classList.toggle("hidden", mode!=="browse");
@@ -875,6 +989,7 @@ async function init(){
     }
   }
   loadState();
+  prevPickedCount = cards.filter(x=>x.picked).length;
 
   // filter dropdown
   const sel = document.getElementById("sourceFilter");
@@ -935,6 +1050,13 @@ async function init(){
   // buttons
   const $ = (id)=>document.getElementById(id);
   const on = (id, fn)=>{ const e = $(id); if(e) e.onclick = fn; };
+
+
+
+
+
+
+
 
   // buttons
   on("togglePicked", ()=>togglePick());
@@ -1002,6 +1124,28 @@ async function init(){
   
     refreshPickColorButtons();
   }
+
+
+  // auto advance (browse only)
+  const anb = document.getElementById("autoNextBtn");
+  if(anb){
+    anb.addEventListener("click", ()=>{
+      // Toggle start/stop explicitly
+      if(autoNextOn) stopAutoNext("btn");
+      else setAutoNextOn(true);
+    });
+  }
+
+  // Stop auto-advance on any user interaction (touch/mouse/key/scroll)
+  const stopEv = (e)=>{
+    // Ignore taps on the auto button itself (it manages its own state)
+    const t = e && e.target ? e.target : null;
+    if(t && (t.id==="autoNextBtn" || t.closest?.("#autoNextBtn"))) return;
+    stopAutoNext("user");
+  };
+  ["pointerdown","touchstart","mousedown","keydown","wheel","scroll"].forEach(ev=>{
+    window.addEventListener(ev, stopEv, {passive:true});
+  });
 
   setupSwipe();
   renderBrowse();

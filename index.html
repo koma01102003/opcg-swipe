@@ -300,6 +300,24 @@ header input[type="search"]{
 
 /* ===== end tighten pick ===== */
 
+
+/* ===== iOS Safari zoom prevention (inputs only) ===== */
+/* iOSでは input/textarea/select の font-size が 16px 未満だと
+   フォーカス時に自動ズームされるため、入力系だけ16pxに固定 */
+input,
+textarea,
+select{
+  font-size:16px !important;
+  max-width:100%;
+  box-sizing:border-box;
+}
+
+/* 横スクロール防止（ズーム残り対策の保険） */
+html, body{
+  overflow-x:hidden;
+}
+/* ===== end iOS fix ===== */
+
 </style>
 </head>
 <body>

@@ -540,21 +540,25 @@ function filteredCards(){
   // source filter
   let arr = (currentSource==="ALL") ? cards : cards.filter(c => normalizeSourceKey(c.source)===currentSource);
 
-  // browse search (ID / 名前) — browse表示時のみ適用
-  if(viewMode === "browse"){
-    const q = (document.getElementById("browseSearch")?.value || "").trim().toLowerCase();
-    if(q){
-      arr = arr.filter(c =>
-        (c.id||"").toLowerCase().includes(q) ||
-        (c.name||"").toLowerCase().includes(q)
-      );
-    }
+  // search (ID / 名前) - case-insensitive
+  const qRaw = (viewMode==="browse"
+    ? (document.getElementById("browseSearch")?.value || "")
+    : (document.getElementById("pickSearch")?.value || "")
+  );
+  const q = qRaw.trim().toLowerCase();
 
-    // 仕分け側：未選択 / 候補⭐ フィルタ
+  if(q){
+    arr = arr.filter(c =>
+      (c.id || "").toString().toLowerCase().includes(q) ||
+      (c.name || "").toString().toLowerCase().includes(q)
+    );
+  }
+
+  // browse-only filters
+  if(viewMode === "browse"){
     if(browsePickFilter === "UNPICKED") arr = arr.filter(c => !c.picked);
     if(browsePickFilter === "PICKED")   arr = arr.filter(c =>  !!c.picked);
 
-    // 仕分け側：色フィルタ（複数選択OR）
     if(browseColors.size > 0){
       arr = arr.filter(c =>
         Array.isArray(c.colors) && c.colors.some(x => browseColors.has(x))
@@ -641,8 +645,26 @@ function togglePick(setTo){
 
   saveState();
 
-  // ⭐を付けたら自動で次へ（仕分けを高速化）
+  // フィルタでリストが減る場合、indexが飛ばないように整える
+  // - 未選択フィルタ中に⭐を付けると、そのカードがリストから消える
+  //   → 同じ currentIndex の位置に「次の未選択」が詰めて入るので、gotoNext()すると1枚飛ぶ
+  // - 候補⭐フィルタ中に⭐を外す場合も同様
   const becamePicked = (!wasPicked && !!c.picked);
+  const becameUnpicked = (wasPicked && !c.picked);
+
+  const filterRemovesCurrent =
+    (viewMode==="browse" && browsePickFilter==="UNPICKED" && becamePicked) ||
+    (viewMode==="browse" && browsePickFilter==="PICKED"   && becameUnpicked);
+
+  if(filterRemovesCurrent){
+    // そのまま詰めた次のカードを表示
+    const afterLen = filteredCards().length;
+    if(currentIndex >= afterLen) currentIndex = Math.max(0, afterLen - 1);
+    renderBrowse();
+    return;
+  }
+
+  // ⭐を付けたら自動で次へ（仕分けを高速化）
   if(becamePicked) gotoNext();
   else renderBrowse();
 }

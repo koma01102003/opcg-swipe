@@ -89,7 +89,8 @@
 /* --- filter buttons unified with colorBtn --- */
 #filterAll,
 #filterNeed,
-#filterOwned{
+#filterOwned,
+#filterFocus{
   padding: 6px 10px;
   border-radius: 999px;
   border: 1px solid #333;
@@ -100,7 +101,8 @@
 }
 #filterAll.primary,
 #filterNeed.primary,
-#filterOwned.primary{
+#filterOwned.primary,
+#filterFocus.primary{
   background: #153;
   border-color: #4a6;
 }
@@ -172,7 +174,10 @@
   /* browse pick-status buttons (match colorBtn pills) */
   #browseFilterAll,
   #browseFilterUnpicked,
-  #browseFilterPicked{
+  #browseFilterPicked,
+  #browseFilterPickedNeed,
+  #browseFilterPickedOwned,
+  #browseFilterFocus{
     padding:6px 10px;
     border-radius:999px;
     border:1px solid #333;
@@ -183,7 +188,10 @@
   }
   #browseFilterAll.primary,
   #browseFilterUnpicked.primary,
-  #browseFilterPicked.primary{
+  #browseFilterPicked.primary,
+  #browseFilterPickedNeed.primary,
+  #browseFilterPickedOwned.primary,
+  #browseFilterFocus.primary{
     background:#153;
     border-color:#4a6;
   }
@@ -383,6 +391,487 @@ html, body{
 }
 /* ===== end auto ===== */
 
+
+/* ===== keep action row single-line on mobile (auto button stays visible) ===== */
+#pickBarTop{
+  flex-wrap:nowrap;
+  overflow-x:auto;
+  -webkit-overflow-scrolling:touch;
+}
+
+/* prevent ugly scrollbar space on some browsers */
+#browseBar::-webkit-scrollbar,
+#pickBarTop::-webkit-scrollbar{
+  height:6px;
+}
+
+/* let search boxes shrink before wrapping */
+#browseSearch,
+#pickSearch{
+  flex:1 1 140px;
+  min-width:120px;
+}
+
+#browseIdSearch,
+#pickIdSearch{
+  flex:0 0 auto;
+  width:84px;          /* 3桁想定 */
+  min-width:78px;      /* タップしやすさ確保 */
+  text-align:center;
+}
+
+/* keep auto button from shrinking awkwardly */
+#autoNextBtn{
+  flex:0 0 auto;
+  white-space:nowrap;
+}
+/* ===== end ===== */
+
+
+/* ===== browse bar layout: source dropdown on its own row, controls stay single-line ===== */
+#browseBar{
+  flex-wrap:wrap; /* allow 2 rows */
+}
+
+#sourceFilter{
+  flex:1 0 100%;
+  width:100%;
+}
+
+/* second row controls container */
+#browseControls{
+  flex-wrap:nowrap;
+  overflow-x:auto;
+  -webkit-overflow-scrolling:touch;
+  width:100%;
+}
+
+#browseControls::-webkit-scrollbar{
+  height:6px;
+}
+/* ===== end browse bar layout ===== */
+
+
+
+
+
+/* ===== focus ring fix v2 (iOS/Android): draw ring INSIDE to avoid clipping ===== */
+#browseControls input[type="search"],
+#browseControls input[type="text"],
+#pickBarTop input[type="search"],
+#pickBarTop input[type="text"]{
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* kill default outline */
+#browseControls input:focus,
+#pickBarTop input:focus{
+  outline: none;
+}
+
+/* inside ring using outline-offset negative (works even on iOS searchfield) */
+#browseSearch:focus,
+#browseIdSearch:focus{
+  outline: 2px solid rgba(255,255,255,.95);
+  outline-offset: -2px;
+  border-color: rgba(255,255,255,.75);
+}
+
+#pickSearch:focus,
+#pickIdSearch:focus{
+  outline: 2px solid rgba(255,255,255,.95);
+  outline-offset: -2px;
+  border-color: rgba(255,255,255,.75);
+}
+
+/* ensure radius is consistent so the ring looks clean */
+#browseSearch,
+#browseIdSearch,
+#pickSearch,
+#pickIdSearch{
+  border-radius: 12px;
+}
+/* ===== end focus ring fix v2 ===== */
+
+
+/* ===== scroll-to-top button ===== */
+#scrollTopBtn{
+  position: fixed;
+  right: 14px;
+  bottom: 14px;
+  z-index: 50;
+  width: 46px;
+  height: 46px;
+  border-radius: 999px;
+  border: 1px solid #444;
+  background: rgba(0,0,0,.55);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  line-height: 1;
+  color: #fff;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(6px);
+  transition: opacity .18s ease, transform .18s ease, filter .18s ease;
+}
+#scrollTopBtn.show{
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+#scrollTopBtn:active{
+  transform: translateY(1px) scale(0.98);
+  filter: brightness(1.15);
+}
+/* iOS safe area */
+@supports (padding: env(safe-area-inset-bottom)){
+  #scrollTopBtn{ bottom: calc(14px + env(safe-area-inset-bottom)); }
+}
+/* ===== end scroll-to-top ===== */
+
+
+/* ===== focus (注目) button ===== */
+.pillBtn.focus{
+  border-color:#665200;
+  color:#ffd65a;
+}
+.pillBtn.focus.on{
+  background:#3a2f00;
+  border-color:#ffd65a;
+  color:#ffe08a;
+}
+/* ===== end focus ===== */
+
+
+/* ===== unified star icon system (候補/所持/未所持/注目) ===== */
+.starIconBtn{
+  min-width: 44px; /* タップ領域 */
+  text-align: center;
+  font-weight: 800;
+}
+
+/* filter star variants */
+#filterFocus, #browseFilterFocus,
+#browseFilterPicked, #browseFilterPickedNeed, #browseFilterPickedOwned{
+  font-size: 18px;
+  padding: 6px 12px;
+}
+
+#browseFilterPicked, #filterAll, #filterNeed, #filterOwned,
+#browseFilterAll, #browseFilterUnpicked{
+  /* no-op: keep existing */
+}
+
+/* picked all: default star */
+#browseFilterPicked,
+#filterAll, #filterNeed, #filterOwned{
+  /* existing styles apply */
+}
+
+#browseFilterPicked,
+#browseFilterPickedNeed,
+#browseFilterPickedOwned,
+#browseFilterFocus,
+#filterFocus{
+  border-color:#3a3a3a;
+}
+
+/* ⭐(未所持): gray ring */
+#browseFilterPickedNeed{
+  box-shadow: inset 0 0 0 2px rgba(200,200,200,.55);
+}
+
+/* ⭐(所持): green ring */
+#browseFilterPickedOwned{
+  box-shadow: inset 0 0 0 2px rgba(80,220,150,.65);
+}
+
+/* 注目: gold fill */
+#browseFilterFocus.primary,
+#filterFocus.primary{
+  background:#3a2f00;
+  border-color:#ffd65a;
+  color:#ffe08a;
+}
+#browseFilterFocus{
+  box-shadow: inset 0 0 0 2px rgba(255,214,90,.55);
+}
+/* ===== end unified star icon system ===== */
+
+
+/* make per-card focus star consistent */
+.pillBtn.focus{
+  font-size: 16px;
+  min-width: 44px;
+  text-align:center;
+}
+
+
+/* ===== star filter buttons: compact but understandable ===== */
+.starIconBtn{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:2px;
+  padding: 7px 10px;
+  min-width: 48px; /* タップしやすさ */
+}
+.starMain{
+  font-size: 18px;
+  line-height: 1;
+}
+.starSub{
+  font-size: 11px;
+  line-height: 1;
+  opacity: .85;
+}
+/* ===== end star filter buttons ===== */
+
+
+/* ===== focus icon & star button styling (filters) ===== */
+.focusIconBtn{
+  min-width: 44px; /* tappable */
+  text-align:center;
+  font-size: 18px;
+  line-height: 1;
+}
+.starBtn{
+  min-width: 44px;
+  text-align:center;
+  font-size: 18px;
+  line-height: 1;
+}
+
+/* focus icon: gold hint even when not active */
+#browseFilterFocus,
+#filterFocus{
+  box-shadow: inset 0 0 0 2px rgba(255,214,90,.35);
+  border-color: rgba(255,214,90,.45);
+  color: #ffe08a;
+}
+#browseFilterFocus.primary,
+#filterFocus.primary{
+  background:#3a2f00;
+  border-color:#ffd65a;
+  color:#ffe08a;
+  box-shadow: none;
+}
+/* ===== end focus icon ===== */
+
+
+/* ===== normalize filter pill sizes ===== */
+#browseFilterAll,
+#browseFilterUnpicked,
+#browseFilterPicked,
+#browseFilterPickedNeed,
+#browseFilterPickedOwned,
+#browseFilterFocus{
+  padding: 6px 12px;
+  min-height: 36px;
+  font-size: 14px;
+  line-height: 1;
+  box-sizing: border-box;
+}
+
+/* icon-only buttons: keep visual size aligned */
+#browseFilterPicked,
+#browseFilterFocus{
+  width: 44px;
+  padding-left: 0;
+  padding-right: 0;
+  text-align: center;
+}
+
+/* owned / unowned text pills shouldn't look larger */
+#browseFilterPickedNeed,
+#browseFilterPickedOwned{
+  min-width: 64px;
+  text-align: center;
+}
+/* ===== end normalize ===== */
+
+
+/* ===== reset special borders for status filters ===== */
+#browseFilterPickedNeed,
+#browseFilterPickedOwned,
+#browseFilterFocus,
+#filterFocus{
+  border-color: #333;
+  box-shadow: none;
+  background: #1a1a1a;
+  color: #fff;
+}
+/* active state still uses .primary */
+#browseFilterPickedNeed.primary,
+#browseFilterPickedOwned.primary,
+#browseFilterFocus.primary,
+#filterFocus.primary{
+  background: #0f5f3a;
+  border-color: #1ea86b;
+  color: #fff;
+}
+/* ===== end reset ===== */
+
+
+/* ===== normalize candidate page action pill sizes ===== */
+.pillBtn{
+  min-height: 36px;
+  padding: 6px 12px;
+  font-size: 14px;
+  line-height: 1;
+  box-sizing: border-box;
+}
+
+/* focus (注目) icon button: same size as text pills */
+.pillBtn.focus{
+  min-width: 64px;
+  padding-left: 12px;
+  padding-right: 12px;
+  font-size: 14px;
+}
+
+/* ensure icon itself doesn't inflate line-height */
+.pillBtn.focus span,
+.pillBtn.focus{
+  line-height: 1;
+}
+/* ===== end normalize candidate pills ===== */
+
+
+/* ===== candidate card action pills: normalize sizes (scoped) ===== */
+#pickList .itemActions .pillBtn{
+  min-height: 36px;
+  padding: 6px 12px;
+  font-size: 14px;
+  line-height: 1;
+  box-sizing: border-box;
+}
+
+
+/* ===== end candidate card action pills ===== */
+
+
+/* ===== browse filter pills: reduce size to match other controls ===== */
+#browseMore #browseFilterAll,
+#browseMore #browseFilterUnpicked,
+#browseMore #browseFilterPicked,
+#browseMore #browseFilterPickedNeed,
+#browseMore #browseFilterPickedOwned,
+#browseMore #browseFilterFocus{
+  padding: 5px 10px;
+  min-height: 32px;
+  font-size: 13px;
+  line-height: 1;
+}
+
+#browseMore #browseFilterPicked,
+#browseMore #browseFilterFocus{
+  width: 40px;
+  padding-left: 0;
+  padding-right: 0;
+}
+/* ===== end browse filter pills ===== */
+
+
+/* ===== candidate page: focus button size match ===== */
+#pickList .itemActions .pillBtn.focus{
+  min-width: auto;          /* remove larger min width */
+  padding: 6px 12px;        /* same as other pills */
+  font-size: 14px;
+  line-height: 1;
+}
+/* ===== end candidate page focus size match ===== */
+
+
+/* ===== SAFE FIX: candidate tab focus filter button size (scoped) ===== */
+#pickMore #filterFocus{
+  /* align with other filter pills in candidate tab */
+  padding: 6px 10px;
+  min-height: 32px;
+  font-size: 14px;
+  line-height: 1.1;
+  box-sizing: border-box;
+}
+
+#pickMore #filterFocus.focusIconBtn{
+  width: 40px;
+  padding-left: 0;
+  padding-right: 0;
+  text-align: center;
+}
+
+/* keep active state consistent with other pills */
+#pickMore #filterFocus.primary{
+  background: #0f5f3a;
+  border-color: #1ea86b;
+  color: #fff;
+}
+/* ===== END SAFE FIX ===== */
+
+
+/* ===== mini-refactor: unify sizes via tokens + scoped rules ===== */
+:root{
+  --pill-h: 32px;
+  --pill-fs: 14px;
+  --pill-px: 10px;
+  --pill-py: 6px;
+
+  --act-h: 36px;
+  --act-fs: 14px;
+  --act-px: 12px;
+  --act-py: 6px;
+}
+
+/* Candidate tab (候補) filter row: #pickMore */
+#pickMore button{
+  min-height: var(--pill-h);
+  font-size: var(--pill-fs);
+  line-height: 1.1;
+  padding: var(--pill-py) var(--pill-px);
+  box-sizing: border-box;
+}
+
+/* Candidate tab: bookmark/focus filter button should NOT be bigger */
+#pickMore #filterFocus.focusIconBtn{
+  width: 40px;
+  padding-left: 0;
+  padding-right: 0;
+  font-size: 16px; /* icon legibility */
+  line-height: 1;
+}
+
+/* Candidate card list action pills: ONLY inside list actions */
+#pickList .itemActions .pillBtn{
+  min-height: var(--act-h);
+  font-size: var(--act-fs);
+  line-height: 1;
+  padding: var(--act-py) var(--act-px);
+  box-sizing: border-box;
+}
+
+/* Candidate card: focus icon button same size as others */
+#pickList .itemActions .pillBtn.focus{
+  min-width: auto;
+  font-size: var(--act-fs);
+  line-height: 1;
+  padding: var(--act-py) var(--act-px);
+}
+
+/* If focus button uses emoji/icon, keep it centered */
+#pickList .itemActions .pillBtn.focus{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+/* ===== end mini-refactor ===== */
+
 </style>
 </head>
 <body>
@@ -398,18 +887,25 @@ html, body{
   <div class="row" id="browseBar">
 <select id="sourceFilter"></select>
 
-    <button id="browseMoreBtn" class="primary">条件 ▾</button>
+    
+
+    <div class="row" id="browseControls">
+<button id="browseMoreBtn" class="primary">条件 ▾</button>
 
     <input id="browseSearch" type="search" placeholder="検索: ID / 名前"/>
-    <input id="browseIdSearch" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="ID数字"/>
+    <input id="browseIdSearch" type="text" maxlength="3" inputmode="numeric" pattern="[0-9]*" placeholder="ID数字"/>
     <button id="autoNextBtn">自動▶</button>
-
+    </div>
   </div>
   <div id="browseMore" class="hidden">
+
     <div class="row">
       <button id="browseFilterAll" class="primary">全部</button>
       <button id="browseFilterUnpicked">未選択</button>
-      <button id="browseFilterPicked">候補⭐</button>
+      <button id="browseFilterPicked" class="starBtn" title="候補⭐">⭐</button>
+      <button id="browseFilterPickedNeed">未所持</button>
+      <button id="browseFilterPickedOwned">所持</button>
+      <button id="browseFilterFocus" class="focusIconBtn" title="注目">🔖</button>
     </div>
     <div class="row">
       <div class="colorGrid" id="browseColorBtns">
@@ -427,13 +923,14 @@ html, body{
     <div class="row" id="pickBarTop">
       <button id="pickMoreBtn" class="primary">条件 ▾</button>
       <input id="pickSearch" type="search" placeholder="検索: ID / 名前"/>
-      <input id="pickIdSearch" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="ID数字"/>
+      <input id="pickIdSearch" type="text" maxlength="3" inputmode="numeric" pattern="[0-9]*" placeholder="ID数字"/>
     </div>
     <div id="pickMore" class="hidden">
       <div class="row">
 <button id="filterAll" class="primary">全部</button>
     <button id="filterNeed">未所持</button>
     <button id="filterOwned">所持</button>
+    <button id="filterFocus" class="focusIconBtn" title="注目">🔖</button>
       </div>
       <div class="row">
         <div class="colorGrid" id="pickColorBtns">
@@ -477,6 +974,8 @@ html, body{
   </section>
 </main>
 
+<button id="scrollTopBtn" aria-label="ページ上部へ" title="上へ">↑</button>
+
 <script>
 
 function elById(id){ return document.getElementById(id); }
@@ -504,9 +1003,9 @@ let cards = [];
 let viewMode = "browse"; // browse | pick
 let currentIndex = 0;
 let currentSource = "ALL";
-let pickFilter = "NEED"; // ALL | NEED | OWNED（デフォルト: 未所持）
+let pickFilter = "NEED"; // ALL | NEED | OWNED | FOCUS（デフォルト: 未所持）
 let browseMoreOpen = false; // 仕分けタブの条件パネル開閉
-let browsePickFilter = "ALL"; // ALL | UNPICKED | PICKED
+let browsePickFilter = "ALL"; // ALL | UNPICKED | PICKED | PICKED_NEED | PICKED_OWNED | FOCUS
 let browseColors = new Set(); // 空=全色（仕分け側）
 let pickMoreOpen = true; // 候補タブの条件パネル開閉（初期ON）
 let pickColors = new Set(); // 空=全色
@@ -583,6 +1082,7 @@ function loadState(){
         c.picked = !!st.picked;
         c.owned  = !!st.owned;
         c.memo   = st.memo || "";
+        c.focused = !!st.focused;
       }
     }
   }catch(e){}
@@ -600,7 +1100,8 @@ function saveState(){
       id: c.id,
       picked: !!c.picked,
       owned: !!c.owned,
-      memo: c.memo || ""
+      memo: c.memo || "",
+      focused: !!c.focused
     }));
     localStorage.setItem(STATE_KEY, JSON.stringify(payload));
   }catch(e){
@@ -697,8 +1198,11 @@ function filteredCards(){
 
   // browse-only filters
   if(viewMode === "browse"){
-    if(browsePickFilter === "UNPICKED") arr = arr.filter(c => !c.picked);
-    if(browsePickFilter === "PICKED")   arr = arr.filter(c =>  !!c.picked);
+    if(browsePickFilter === "UNPICKED")     arr = arr.filter(c => !c.picked);
+    if(browsePickFilter === "PICKED")       arr = arr.filter(c =>  !!c.picked);
+    if(browsePickFilter === "PICKED_NEED")  arr = arr.filter(c =>  !!c.picked && !c.owned);
+    if(browsePickFilter === "PICKED_OWNED") arr = arr.filter(c =>  !!c.picked &&  !!c.owned);
+    if(browsePickFilter === "FOCUS")        arr = arr.filter(c =>  !!c.focused);
 
     if(browseColors.size > 0){
       arr = arr.filter(c =>
@@ -861,10 +1365,17 @@ function setBrowseMoreOpen(open){
 }
 
 function updateBrowseFilterButtons(){
-  const set = (id, active)=>document.getElementById(id).classList.toggle("primary", active);
-  set("browseFilterAll", browsePickFilter==="ALL");
-  set("browseFilterUnpicked", browsePickFilter==="UNPICKED");
-  set("browseFilterPicked", browsePickFilter==="PICKED");
+  const set = (id, active)=>{
+    const el = document.getElementById(id);
+    if(!el) return;
+    el.classList.toggle("primary", active);
+  };
+  set("browseFilterAll",         browsePickFilter==="ALL");
+  set("browseFilterUnpicked",    browsePickFilter==="UNPICKED");
+  set("browseFilterPicked",      browsePickFilter==="PICKED");
+  set("browseFilterPickedNeed",  browsePickFilter==="PICKED_NEED");
+  set("browseFilterPickedOwned", browsePickFilter==="PICKED_OWNED");
+  set("browseFilterFocus",       browsePickFilter==="FOCUS");
 }
 
 function refreshBrowseColorButtons(){
@@ -886,6 +1397,8 @@ function updatePickFilterButtons(){
   set("filterAll", pickFilter==="ALL");
   set("filterNeed", pickFilter==="NEED");
   set("filterOwned", pickFilter==="OWNED");
+  const ff = document.getElementById("filterFocus");
+  if(ff) ff.classList.toggle("primary", pickFilter==="FOCUS");
 }
 
 function renderPickList(){
@@ -899,8 +1412,9 @@ const list = document.getElementById("pickList");
   const idNum = (document.getElementById("pickIdSearch")?.value || "").replace(/\D/g, "").trim();
 
   let picked = cards.filter(c=>c.picked).slice().sort(compareCardId);
-  if(pickFilter==="NEED") picked = picked.filter(c=>!c.owned);
+  if(pickFilter==="NEED")  picked = picked.filter(c=>!c.owned);
   if(pickFilter==="OWNED") picked = picked.filter(c=>c.owned);
+  if(pickFilter==="FOCUS") picked = picked.filter(c=>!!c.focused);
 
   // ★ 色フィルタ（複数選択OR）
   if(pickColors.size > 0){
@@ -926,10 +1440,11 @@ const list = document.getElementById("pickList");
   }
 
   const ownedCount = cards.filter(c=>c.picked && c.owned).length;
+  const focusedCount = cards.filter(c=>c.picked && c.focused).length;
   const pickedCount = cards.filter(c=>c.picked).length;
   const colorLabel = (pickColors.size===0) ? "全色" : Array.from(pickColors).join("/");
   document.getElementById("pickSummary").textContent =
-    `候補⭐ ${pickedCount}件（所持 ${ownedCount}件） / 表示 ${picked.length}件（${colorLabel}）`;
+    `候補⭐ ${pickedCount}件（所持 ${ownedCount}件 / 注目 ${focusedCount}件） / 表示 ${picked.length}件（${colorLabel}）`;
 
     for(const c of picked){
     const el = document.createElement("div");
@@ -945,15 +1460,18 @@ const list = document.getElementById("pickList");
         <div class="itemActions">
           <button class="pillBtn danger js-unpick" type="button">☆ 外す</button>
           <button class="pillBtn good js-owned" type="button">${c.owned ? "所持" : "未所持"}</button>
+          <button class="pillBtn focus js-focus" type="button" title="${c.focused ? "注目中" : "注目"}">${c.focused ? "📌" : "🔖"}</button>
         </div>
 
         <div class="memoBox"><textarea placeholder="例）秋葉原○○ / 2026-02-05 / ¥300">${c.memo||""}</textarea></div>
       </div>
     `;
     const ownedBtn = el.querySelector(".js-owned");
+    const focusBtn = el.querySelector(".js-focus");
     const ta = el.querySelector("textarea");
     const unpickBtn = el.querySelector(".js-unpick");
     if(ownedBtn) ownedBtn.classList.toggle("on", !!c.owned);
+    if(focusBtn) focusBtn.classList.toggle("on", !!c.focused);
     
     // 長押しで「外す」（誤タップ防止）
     let holdTimer = null;
@@ -987,6 +1505,12 @@ const list = document.getElementById("pickList");
     unpickBtn.addEventListener("touchcancel", endHold);
 ownedBtn.addEventListener("click", ()=>{
       c.owned = !c.owned;
+      saveState();
+      setPickMoreOpen(true);
+    renderPickList(); // 集計反映
+    });
+focusBtn.addEventListener("click", ()=>{
+      c.focused = !c.focused;
       saveState();
       setPickMoreOpen(true);
     renderPickList(); // 集計反映
@@ -1030,6 +1554,7 @@ async function init(){
     c.memo = c.memo || "";
     c.picked = !!c.picked;
     c.owned = !!c.owned;
+    c.focused = !!c.focused;
 
     if(Array.isArray(c.colors)){
       c.colors = c.colors.map(x => (x || "").trim()).filter(Boolean);
@@ -1063,11 +1588,18 @@ async function init(){
 
   const bAll = document.getElementById("browseFilterAll");
   const bUnp = document.getElementById("browseFilterUnpicked");
-  const bPic = document.getElementById("browseFilterPicked");
 
   if(bAll) bAll.addEventListener("click", ()=>{ browsePickFilter="ALL"; updateBrowseFilterButtons(); currentIndex=0; renderBrowse(); });
   if(bUnp) bUnp.addEventListener("click", ()=>{ browsePickFilter="UNPICKED"; updateBrowseFilterButtons(); currentIndex=0; renderBrowse(); });
-  if(bPic) bPic.addEventListener("click", ()=>{ browsePickFilter="PICKED"; updateBrowseFilterButtons(); currentIndex=0; renderBrowse(); });
+  const bPic  = document.getElementById("browseFilterPicked");
+  const bNeed = document.getElementById("browseFilterPickedNeed");
+  const bOwned = document.getElementById("browseFilterPickedOwned");
+  const bFocus = document.getElementById("browseFilterFocus");
+
+  if(bPic)  bPic.addEventListener("click", ()=>{ browsePickFilter="PICKED";       updateBrowseFilterButtons(); currentIndex=0; renderBrowse(); });
+  if(bNeed) bNeed.addEventListener("click", ()=>{ browsePickFilter="PICKED_NEED";  updateBrowseFilterButtons(); currentIndex=0; renderBrowse(); });
+  if(bOwned) bOwned.addEventListener("click", ()=>{ browsePickFilter="PICKED_OWNED"; updateBrowseFilterButtons(); currentIndex=0; renderBrowse(); });
+  if(bFocus) bFocus.addEventListener("click", ()=>{ browsePickFilter="FOCUS";       updateBrowseFilterButtons(); currentIndex=0; renderBrowse(); });
 
   updateBrowseFilterButtons();
 
@@ -1101,6 +1633,9 @@ async function init(){
   const bId = document.getElementById("browseIdSearch");
   if(bId){
     bId.addEventListener("input", ()=>{
+    const v = bId.value.replace(/\D/g, "").slice(0, 3);
+    if(bId.value !== v) bId.value = v;
+
       if(viewMode!=="browse") return;
       currentIndex = 0;
       renderBrowse();
@@ -1137,10 +1672,15 @@ async function init(){
     renderPickList();});
   on("filterOwned", ()=>{pickFilter="OWNED"; updatePickFilterButtons(); setPickMoreOpen(true);
     renderPickList();});
+  on("filterFocus", ()=>{pickFilter="FOCUS"; updatePickFilterButtons(); setPickMoreOpen(true);
+    renderPickList();});
 
   const ps = $("pickSearch"); if(ps) ps.addEventListener("input", ()=>{ if(viewMode==="pick") setPickMoreOpen(true);
     renderPickList(); });
-  const pid = $("pickIdSearch"); if(pid) pid.addEventListener("input", ()=>{ if(viewMode==="pick") setPickMoreOpen(true);
+  const pid = $("pickIdSearch"); if(pid) pid.addEventListener("input", ()=>{
+    const v = pid.value.replace(/\D/g, "").slice(0, 3);
+    if(pid.value !== v) pid.value = v;
+ if(viewMode==="pick") setPickMoreOpen(true);
     renderPickList(); });
 
   // keyboard
@@ -1211,6 +1751,27 @@ async function init(){
 
   setupSwipe();
   renderBrowse();
+
+  // scroll-to-top button
+  const stBtn = document.getElementById("scrollTopBtn");
+  const updateScrollTopBtn = ()=>{
+    if(!stBtn) return;
+    // show after scrolling down a bit; also consider horizontal-only scroll
+    const y = window.scrollY || document.documentElement.scrollTop || 0;
+    stBtn.classList.toggle("show", y > 240);
+  };
+  if(stBtn){
+    stBtn.addEventListener("click", ()=>{
+      const y = window.scrollY || document.documentElement.scrollTop || 0;
+      window.scrollTo({
+        top: 0,
+        behavior: y > 2000 ? "auto" : "smooth"
+      });
+    });
+  }
+  window.addEventListener("scroll", updateScrollTopBtn, {passive:true});
+  window.addEventListener("resize", updateScrollTopBtn, {passive:true});
+  updateScrollTopBtn();
 }
 init();
 </script>

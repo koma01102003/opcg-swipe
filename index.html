@@ -141,7 +141,30 @@
   }
 
 
-  /* browse-only "more filters" panel */
+  
+
+  /* browse id-only search */
+  #browseIdSearch{
+    width:110px;
+    min-width:90px;
+    padding:7px 10px;
+    border-radius:12px;
+    border:1px solid #333;
+    background:#0f0f0f;
+    color:#fff;
+  }
+  /* pick id-only search */
+  #pickIdSearch{
+    width:110px;
+    min-width:90px;
+    padding:7px 10px;
+    border-radius:12px;
+    border:1px solid #333;
+    background:#0f0f0f;
+    color:#fff;
+  }
+
+/* browse-only "more filters" panel */
   #browseMoreBtn{padding:8px 10px;border-radius:10px;border:1px solid #333;background:#1a1a1a;color:#fff;white-space:nowrap}
   #browseMore{width:100%;margin-top:8px}
 
@@ -378,6 +401,7 @@ html, body{
     <button id="browseMoreBtn" class="primary">条件 ▾</button>
 
     <input id="browseSearch" type="search" placeholder="検索: ID / 名前"/>
+    <input id="browseIdSearch" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="ID数字"/>
     <button id="autoNextBtn">自動▶</button>
 
   </div>
@@ -403,6 +427,7 @@ html, body{
     <div class="row" id="pickBarTop">
       <button id="pickMoreBtn" class="primary">条件 ▾</button>
       <input id="pickSearch" type="search" placeholder="検索: ID / 名前"/>
+      <input id="pickIdSearch" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="ID数字"/>
     </div>
     <div id="pickMore" class="hidden">
       <div class="row">
@@ -647,11 +672,27 @@ function filteredCards(){
   );
   const q = qRaw.trim().toLowerCase();
 
+  // ID digits-only search（ハイフン以降のみ・0埋め対応）
+  const idRaw = (viewMode==="browse"
+    ? (document.getElementById("browseIdSearch")?.value || "")
+    : (document.getElementById("pickIdSearch")?.value || "")
+  );
+  const idNum = idRaw.replace(/\D/g, "").trim(); // 入力は数字のみ想定
+
   if(q){
     arr = arr.filter(c =>
       (c.id || "").toString().toLowerCase().includes(q) ||
       (c.name || "").toString().toLowerCase().includes(q)
     );
+  }
+
+  if(idNum){
+    arr = arr.filter(c => {
+      const m = (c.id || "").toString().match(/-(\d+)$/); // ハイフン以降
+      if(!m) return false;
+      const tail = m[1]; // 例: "001"
+      return parseInt(tail, 10) === parseInt(idNum, 10);
+    });
   }
 
   // browse-only filters
@@ -855,6 +896,7 @@ const list = document.getElementById("pickList");
   list.innerHTML = "";
 
   const q = (document.getElementById("pickSearch")?.value || "").trim().toLowerCase();
+  const idNum = (document.getElementById("pickIdSearch")?.value || "").replace(/\D/g, "").trim();
 
   let picked = cards.filter(c=>c.picked).slice().sort(compareCardId);
   if(pickFilter==="NEED") picked = picked.filter(c=>!c.owned);
@@ -872,6 +914,15 @@ const list = document.getElementById("pickList");
       (c.id||"").toLowerCase().includes(q) ||
       (c.name||"").toLowerCase().includes(q)
     );
+  }
+
+  if(idNum){
+    picked = picked.filter(c => {
+      const m = (c.id || "").toString().match(/-(\d+)$/);
+      if(!m) return false;
+      const tail = m[1];
+      return parseInt(tail, 10) === parseInt(idNum, 10);
+    });
   }
 
   const ownedCount = cards.filter(c=>c.picked && c.owned).length;
@@ -1047,6 +1098,15 @@ async function init(){
     });
   }
 
+  const bId = document.getElementById("browseIdSearch");
+  if(bId){
+    bId.addEventListener("input", ()=>{
+      if(viewMode!=="browse") return;
+      currentIndex = 0;
+      renderBrowse();
+    });
+  }
+
   // buttons
   const $ = (id)=>document.getElementById(id);
   const on = (id, fn)=>{ const e = $(id); if(e) e.onclick = fn; };
@@ -1079,6 +1139,8 @@ async function init(){
     renderPickList();});
 
   const ps = $("pickSearch"); if(ps) ps.addEventListener("input", ()=>{ if(viewMode==="pick") setPickMoreOpen(true);
+    renderPickList(); });
+  const pid = $("pickIdSearch"); if(pid) pid.addEventListener("input", ()=>{ if(viewMode==="pick") setPickMoreOpen(true);
     renderPickList(); });
 
   // keyboard

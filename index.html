@@ -200,9 +200,46 @@ body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans J
     background:rgba(0,0,0,.55);backdrop-filter:blur(4px);
     display:flex;align-items:center;justify-content:center;
     font-size:22px;line-height:1;color:#ffd65a;
-  }.overlayPick.isPicked{border-color:#6a5;background:rgba(0,0,0,.65);}/* pick-only "more filters" panel */
+  }.overlayPick.isPicked{border-color:#6a5;background:rgba(0,0,0,.65);}
+
+/* overlay actions (⭐ + 📌) */
+.overlayActions{
+  position:absolute;
+  top:10px;
+  right:10px;
+  z-index:3;
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+}
+.overlayActions .overlayBtn{
+  width:44px;
+  height:44px;
+  border-radius:999px;
+  border:1px solid #444;
+  background:rgba(0,0,0,.55);
+  backdrop-filter:blur(4px);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:22px;
+  line-height:1;
+  user-select:none;
+}
+/* buttons inside overlayActions should not be absolutely positioned individually */
+.overlayActions .overlayPick,
+.overlayActions .overlayFocus{
+  position:static;
+  top:auto; right:auto;
+}
+.overlayActions .overlayPick{ color:#ffd65a; }
+.overlayActions .overlayPick.isPicked{ border-color:#6a5; background:rgba(0,0,0,.65); }
+.overlayActions .overlayFocus{ color:#9ad; }
+.overlayActions .overlayFocus.isFocused{ border-color:#6a5; color:#6a5; background:rgba(0,0,0,.65); }
+
+/* pick-only "more filters" panel */
   #pickMoreBtn{padding:4px 10px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text);white-space:nowrap}#pickMore{width:100%}#pickBarTop{width:100%}/* ===== layout spacing (consolidated) ===== */
-  #pickMore{row-gap:6px;margin-bottom:2px;}#pickBar, #pickBar .row{row-gap:0px;}#pickBarTop{row-gap:6px;margin-bottom:2px;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;}.row{row-gap:6px;}/* ===== end layout spacing ===== */
+  #pickMore{row-gap:6px;margin-bottom:2px;}#pickBar, #pickBar .row{row-gap:0px;}#pickBarTop{row-gap:6px;margin-bottom:2px;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:4px 0px;}.row{row-gap:6px;}/* ===== end layout spacing ===== */
 
   /* pick list improvements */
   .itemActions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px}.pillBtn.danger{border-color:#633}.pillBtn.good{border-color:#355}.pillBtn.thumb.pickImgCol{display:flex;flex-direction:column;gap:10px;align-items:flex-start}.thumb.pickImgCol img{display:block}.item textarea{width:100%;max-width:100%;box-sizing:border-box;display:block}/* color filter buttons */
@@ -327,9 +364,7 @@ header :where(
   padding-top:7px;
   padding-bottom:7px;
 }/* Keep pill buttons readable while matching compact header tone */
-#pickBarTop{
-  margin-bottom:4px;
-}/* select 自体の縦サイズを微調整 */
+/* select 自体の縦サイズを微調整 */
 #sourceFilter{
   padding-top:7px;
   padding-bottom:7px;
@@ -390,6 +425,7 @@ html, body{
   overflow-x:auto;
   -webkit-overflow-scrolling:touch;
   width:100%;
+  padding: 2px 0px;
 }#browseControls::-webkit-scrollbar{
   height:6px;
 }/* ===== end browse bar layout ===== */
@@ -615,7 +651,10 @@ header .topTabs .btnTab{
       <div class="card" id="card">
         <div class="badge" id="badgeLeft"></div>
         
-        <button id="overlayPick" class="overlayPick btn" aria-label="候補に追加/解除" title="候補に追加/解除">☆</button>
+        <div class="overlayActions" aria-label="カード操作">
+          <button id="overlayPick" class="overlayPick overlayBtn btn" aria-label="候補に追加/解除" title="候補に追加/解除">☆</button>
+          <button id="overlayFocus" class="overlayFocus overlayBtn btn" aria-label="注目に追加/解除" title="注目に追加/解除">🔖</button>
+        </div>
         <img id="cardImg" alt="card"/>
         <div class="meta">
           <div class="id" id="mId"></div>
@@ -954,6 +993,8 @@ header .topTabs .btnTab{
       $('mSrc').textContent = '';
       const op = $('overlayPick');
       if (op) { op.classList.remove('isPicked'); op.textContent = '☆'; }
+      const of = $('overlayFocus');
+      if (of) { of.classList.remove('isFocused'); of.textContent = c.focused ? '📌' : '🔖'; }
       return;
     }
 
@@ -977,6 +1018,13 @@ header .topTabs .btnTab{
     if (op) {
       op.classList.toggle('isPicked', !!c.picked);
       op.textContent = c.picked ? '⭐' : '☆';
+    }
+
+    // overlay focus button
+    const of = $('overlayFocus');
+    if (of) {
+      of.classList.toggle('isFocused', !!c.focused);
+      of.textContent = c.focused ? '📌' : '🔖';
     }
   }
 
@@ -1026,6 +1074,25 @@ header .topTabs .btnTab{
     if (becamePicked) gotoNext();
     else renderBrowse();
   }
+
+
+  function toggleFocus(setTo) {
+    const arr = filteredCardsForBrowse();
+    if (arr.length === 0) return;
+
+    const c = arr[state.currentIndex];
+    const wasFocused = !!c.focused;
+
+    if (setTo === true) c.focused = true;
+    else if (setTo === false) c.focused = false;
+    else c.focused = !c.focused;
+
+    // If nothing changed, still refresh UI (cheap) to keep overlay in sync
+    saveStateDebounced();
+    renderBrowse();
+  }
+
+
 
   // ===== pick rendering =====
   function renderPickList() {
@@ -1208,7 +1275,8 @@ header .topTabs .btnTab{
       if (dx < 0) gotoNext();
       else gotoPrev();
     });
-  }
+
+    }
 
   function setAutoNextOn(onFlag) {
     state.autoNextOn = !!onFlag;
@@ -1332,8 +1400,9 @@ header .topTabs .btnTab{
       if (state.viewMode === 'browse') { state.currentIndex = 0; renderBrowse(); }
     });
 
-    // overlay pick
+    // overlay pick/focus
     onClick('overlayPick', () => togglePick());
+    onClick('overlayFocus', () => toggleFocus());
 
     // pick: more panel
     onClick('pickMoreBtn', () => setPickMoreOpen(!state.pickMoreOpen));

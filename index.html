@@ -803,13 +803,12 @@ header .topTabs .btnTab{
     return ($((id))?.value || '').replace(/\D/g, '').trim();
   }
 
-  function filterByIdDigits(arr, idNum) {
-    if (!idNum) return arr;
-    const target = parseInt(idNum, 10);
+  function filterByIdDigits(arr, idQuery) {
+    if (!idQuery) return arr;
+
     return arr.filter((c) => {
-      const m = (c.id || '').toString().match(/-(\d+)$/);
-      if (!m) return false;
-      return parseInt(m[1], 10) === target;
+      const idStr = (c.id || '').toString();
+      return idStr.includes(idQuery);
     });
   }
 
